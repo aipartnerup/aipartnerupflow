@@ -13,7 +13,8 @@ import uuid
 from typing import Dict, Any, Optional, List, Type
 from datetime import datetime, timezone
 
-from aipartnerupflow.core.execution.task_manager import TaskManager, TaskTreeNode, TaskPreHook, TaskPostHook
+from aipartnerupflow.core.execution.task_manager import TaskManager
+from aipartnerupflow.core.types import TaskTreeNode, TaskPreHook, TaskPostHook
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage import get_default_session
 from aipartnerupflow.api.event_queue_bridge import EventQueueBridge
@@ -64,13 +65,16 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         self,
         context: RequestContext,
         event_queue: EventQueue,
-    ) -> None:
+    ) -> Any:
         """
         Execute task tree from tasks array
         
         Args:
             context: Request context from A2A protocol
             event_queue: Event queue for streaming updates
+            
+        Returns:
+            Result from simple mode execution, or None for streaming mode
         """
         logger.debug(f"Context configuration: {context.configuration}")
         logger.debug(f"Context metadata: {context.metadata}")
@@ -81,9 +85,10 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         if use_streaming_mode:
             # Streaming mode: push multiple status update events
             await self._execute_streaming_mode(context, event_queue)
+            return None
         else:
             # Simple mode: return result directly
-            await self._execute_simple_mode(context, event_queue)
+            return await self._execute_simple_mode(context, event_queue)
 
     def _should_use_streaming_mode(self, context: RequestContext) -> bool:
         """

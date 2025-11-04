@@ -18,6 +18,12 @@ which is the standard protocol for agent communication. See api/ module for A2A 
 # Re-export from core modules for convenience
 from aipartnerupflow.core.interfaces import ExecutableTask, BaseTask
 from aipartnerupflow.core.execution import TaskManager, StreamingCallbacks
+from aipartnerupflow.core.types import (
+    TaskTreeNode,
+    TaskPreHook,
+    TaskPostHook,
+    TaskStatus,
+)
 from aipartnerupflow.core.storage import (
     create_session,
     get_default_session,
@@ -30,6 +36,11 @@ __all__ = [
     # Base interfaces
     "ExecutableTask",
     "BaseTask",
+    # Core types
+    "TaskTreeNode",
+    "TaskPreHook",
+    "TaskPostHook",
+    "TaskStatus",
     # Execution
     "TaskManager",
     "StreamingCallbacks",

@@ -15,7 +15,8 @@ from aipartnerupflow.features.templates.task_planner import (
     TaskTemplate,
     TaskTemplateTreeNode
 )
-from aipartnerupflow.core.execution.task_manager import TaskManager, TaskTreeNode
+from aipartnerupflow.core.execution.task_manager import TaskManager
+from aipartnerupflow.core.types import TaskTreeNode
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.utils.logger import get_logger
 

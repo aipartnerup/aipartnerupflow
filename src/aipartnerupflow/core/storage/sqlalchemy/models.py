@@ -58,7 +58,7 @@ class TaskModel(Base):
     status = Column(String(50), default="pending")  # Task status: pending, in_progress, completed, failed, cancelled
     
     # === Task Orchestration (TaskManager) ===
-    priority = Column(Integer, default=1)  # Priority level: 0=low, 1=normal, 2=high, 3=urgent
+    priority = Column(Integer, default=2)  # Priority level: 0=urgent (highest), 1=high, 2=normal (default), 3=low (lowest). ASC order: smaller numbers execute first.
     dependencies = Column(JSON, nullable=True)  # Task dependencies: [{"id": "uuid", "required": true}]
     
     # === Task Data ===

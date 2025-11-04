@@ -16,7 +16,7 @@ from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.utils.logger import get_logger
 
 if TYPE_CHECKING:
-    from aipartnerupflow.core.execution.task_manager import TaskTreeNode
+    from aipartnerupflow.core.types import TaskTreeNode
 
 logger = get_logger(__name__)
 
@@ -86,7 +86,7 @@ class TaskRepository:
             name: Task name
             user_id: User ID
             parent_id: Parent task ID
-            priority: Priority level (0=low, 1=normal, 2=high, 3=urgent)
+            priority: Priority level (0=urgent/highest, 1=high, 2=normal, 3=low/lowest). ASC order: smaller numbers execute first.
             dependencies: Task dependencies: [{"id": "uuid", "required": true}]
             input_data: Input data for the task
             schemas: Task schemas
@@ -244,6 +244,9 @@ class TaskRepository:
         Returns:
             TaskTreeNode instance with all children recursively built
         """
+        # Lazy import to avoid circular dependency
+        from aipartnerupflow.core.types import TaskTreeNode
+        
         # Get all child tasks
         child_tasks = await self.get_child_tasks_by_parent_id(task.id)
         
@@ -394,7 +397,7 @@ class TaskRepository:
         so this method mainly ensures the hierarchy is properly saved.
         """
         # Import here to avoid circular dependency
-        from aipartnerupflow.core.execution.task_manager import TaskTreeNode
+        from aipartnerupflow.core.types import TaskTreeNode
         
         try:
             # Save root task first

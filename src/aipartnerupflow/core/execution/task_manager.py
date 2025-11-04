@@ -12,54 +12,15 @@ from inspect import iscoroutinefunction
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.execution.streaming_callbacks import StreamingCallbacks
+from aipartnerupflow.core.types import (
+    TaskTreeNode,
+    TaskPreHook,
+    TaskPostHook,
+    TaskStatus,
+)
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-# Type aliases for hook functions
-TaskPreHook = Callable[[TaskModel], Union[None, Awaitable[None]]]
-TaskPostHook = Callable[[TaskModel, Dict[str, Any], Any], Union[None, Awaitable[None]]]
-
-
-class TaskTreeNode:
-    """
-    Task tree node for hierarchical task management
-    """
-    
-    def __init__(self, task: TaskModel):
-        self.task = task
-        self.children: List["TaskTreeNode"] = []
-    
-    def add_child(self, child: "TaskTreeNode"):
-        """Add a child node"""
-        self.children.append(child)
-    
-    def calculate_progress(self) -> float:
-        """Calculate progress of the task tree"""
-        if not self.children:
-            return float(self.task.progress) if self.task.progress else 0.0
-        
-        total_progress = 0.0
-        for child in self.children:
-            total_progress += child.calculate_progress()
-        
-        return total_progress / len(self.children)
-    
-    def calculate_status(self) -> str:
-        """Calculate overall status of the task tree"""
-        if not self.children:
-            return self.task.status
-        
-        statuses = [child.calculate_status() for child in self.children]
-        
-        if all(s == "completed" for s in statuses):
-            return "completed"
-        elif any(s == "failed" for s in statuses):
-            return "failed"
-        elif any(s == "in_progress" for s in statuses):
-            return "in_progress"
-        else:
-            return "pending"
 
 
 class TaskManager:
@@ -231,7 +192,8 @@ class TaskManager:
                 logger.debug(f"No children for task {node.task.id} to execute")
                 return
             
-            # Sort priorities and execute groups sequentially
+            # Sort priorities in ascending order (lower numbers = higher priority)
+            # Industry standard: smaller numbers execute first (higher priority)
             sorted_priorities = sorted(priority_groups.keys())
             logger.debug(f"Executing {len(node.children)} children for task {node.task.id} in {len(sorted_priorities)} priority groups")
             
@@ -423,19 +385,8 @@ class TaskManager:
             final_input_data = task.input_data or {}
             logger.info(f"Task {task.id} execution - calling agent executor (name: {task.name})")
             
-            # TODO: Integrate with local agent executor
-            # This will call the crew executor directly instead of A2A client
-            # For now, this is a placeholder that will be replaced when crews are integrated
-            
-            # Placeholder execution (will be replaced with actual crew execution)
-            # Actual implementation will be:
-            # result = await self._execute_task_with_crew(task.name, final_input_data, task.schemas)
-            task_result = {
-                "message": "Task execution - agent layer integration pending",
-                "task_id": task.id,
-                "name": task.name,
-                "input_data": final_input_data
-            }
+            # Execute task based on schemas
+            task_result = await self._execute_task_with_schemas(task, final_input_data)
             
             # Update task status using repository
             await self.task_repository.update_task_status(
@@ -774,15 +725,123 @@ class TaskManager:
                     logger.debug("No tasks were triggered by this completion")
             else:
                 logger.debug("No waiting tasks found")
-                
         except Exception as e:
-            logger.error(f"Error checking and triggering dependent tasks: {str(e)}")
+            logger.error(f"Error in execute_after_task for {completed_task.id}: {str(e)}", exc_info=True)
+    
+    async def _execute_task_with_schemas(
+        self,
+        task: TaskModel,
+        input_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute task based on schemas configuration
+        
+        Args:
+            task: Task to execute
+            input_data: Input data for task execution
+            
+        Returns:
+            Task execution result
+        """
+        schemas = task.schemas or {}
+        task_type = schemas.get("type", "stdio")
+        task_method = schemas.get("method", "command")
+        
+        logger.info(f"Executing task {task.id} with type={task_type}, method={task_method}")
+        
+        if task_type == "stdio":
+            # Use stdio executor (MCP-style process execution)
+            try:
+                from aipartnerupflow.features.stdio import StdioExecutor
+                executor = StdioExecutor()
+                
+                # Merge method into input_data
+                execution_inputs = input_data.copy()
+                execution_inputs["method"] = task_method
+                
+                # If method is system_info and resource is not specified, try to infer from task name
+                if task_method == "system_info" and "resource" not in execution_inputs:
+                    task_name_lower = task.name.lower()
+                    if "cpu" in task_name_lower:
+                        execution_inputs["resource"] = "cpu"
+                    elif "memory" in task_name_lower or "mem" in task_name_lower:
+                        execution_inputs["resource"] = "memory"
+                    elif "disk" in task_name_lower:
+                        execution_inputs["resource"] = "disk"
+                    else:
+                        execution_inputs["resource"] = "all"
+                
+                # Handle aggregate_results method for merging dependency results
+                if task_method == "aggregate_results":
+                    return self._aggregate_dependency_results(task, input_data)
+                
+                result = await executor.execute(execution_inputs)
+                return result
+            except ImportError:
+                logger.warning("Stdio executor not available, using placeholder")
+                return {
+                    "message": "Stdio executor not available",
+                    "task_id": task.id,
+                    "name": task.name,
+                    "input_data": input_data
+                }
+        else:
+            # Placeholder for other task types (e.g., crew, http, etc.)
+            logger.info(f"Task type {task_type} not yet implemented, using placeholder")
+            return {
+                "message": f"Task execution for type '{task_type}' not yet implemented",
+                "task_id": task.id,
+                "name": task.name,
+                "input_data": input_data,
+                "schemas": schemas
+            }
+    
+    def _aggregate_dependency_results(
+        self,
+        task: TaskModel,
+        input_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Aggregate results from dependency tasks
+        
+        Args:
+            task: Task that needs to aggregate dependency results
+            input_data: Input data containing dependency results (from _resolve_task_dependencies)
+            
+        Returns:
+            Aggregated result dictionary
+        """
+        # Extract dependency results from input_data
+        # Dependency results are merged into input_data with keys like dependency IDs
+        aggregated = {
+            "summary": "System Resources Aggregation",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "resources": {}
+        }
+        
+        # Get dependencies from task
+        dependencies = task.dependencies or []
+        
+        for dep in dependencies:
+            dep_id = dep.get("id") if isinstance(dep, dict) else dep
+            if dep_id and dep_id in input_data:
+                # Dependency result is in input_data
+                dep_result = input_data[dep_id]
+                aggregated["resources"][dep_id] = dep_result
+        
+        # Also check for any keys that look like task IDs (fallback)
+        for key, value in input_data.items():
+            if key not in aggregated["resources"] and isinstance(value, dict):
+                # Check if this looks like a task result (has system info structure)
+                if "system" in value or "cores" in value or "total" in value:
+                    aggregated["resources"][key] = value
+        
+        aggregated["resource_count"] = len(aggregated["resources"])
+        
+        return aggregated
 
 
 __all__ = [
     "TaskManager",
-    "TaskTreeNode",
-    "TaskPreHook",
-    "TaskPostHook",
 ]
 

@@ -18,7 +18,7 @@ from a2a.types import (
 from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
 from aipartnerupflow.api.custom_starlette_app import CustomA2AStarletteApplication
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
-from aipartnerupflow.core.execution.task_manager import TaskPreHook, TaskPostHook
+from aipartnerupflow.core.types import TaskPreHook, TaskPostHook
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)

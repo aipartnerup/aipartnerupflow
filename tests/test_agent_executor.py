@@ -1,14 +1,24 @@
 """
 Test AgentExecutor functionality
+
+This module contains both unit tests (with mocks) and integration tests (with real database).
+Integration tests are marked with @pytest.mark.integration and can be run separately:
+    pytest tests/test_agent_executor.py -m integration  # Run only integration tests
+    pytest tests/test_agent_executor.py -m "not integration"  # Run only unit tests
 """
 import pytest
 import uuid
+import json
 from unittest.mock import Mock, AsyncMock, patch
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events import EventQueue
 from a2a.types import Message, DataPart
 
 from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
+from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from aipartnerupflow.core.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class TestAgentExecutor:
@@ -246,4 +256,194 @@ class TestAgentExecutor:
                 
                 # Should have executed
                 assert mock_manager.distribute_task_tree.called
+    
+    # ============================================================================
+    # Integration Tests (Real Database)
+    # ============================================================================
+    
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_execute_system_resource_monitoring(self, executor, sync_db_session, mock_event_queue):
+        """
+        Integration test: Real task tree execution for system resource monitoring
+        
+        This test uses real TaskManager and database to execute a task tree
+        that monitors system resources (CPU, memory, disk) and merges results.
+        
+        Task structure:
+        - Parent task: Aggregate system resources (depends on cpu, memory, disk)
+        - Child task 1: Get CPU info
+        - Child task 2: Get Memory info
+        - Child task 3: Get Disk info
+        
+        Parent task will merge all child results.
+        """
+        user_id = "test-user-real"
+        
+        # Create task tree structure
+        tasks = [
+            {
+                "id": "system-resources-root",
+                "user_id": user_id,
+                "name": "System Resources Monitor",
+                "status": "pending",
+                "priority": 3,
+                "has_children": True,
+                "dependencies": [
+                    {"id": "cpu-info", "required": True},
+                    {"id": "memory-info", "required": True},
+                    {"id": "disk-info", "required": True}
+                ],
+                "schemas": {
+                    "type": "stdio",
+                    "method": "aggregate_results"
+                },
+                "input_data": {}
+            },
+            {
+                "id": "cpu-info",
+                "parent_id": "system-resources-root",
+                "user_id": user_id,
+                "name": "Get CPU Information",
+                "status": "pending",
+                "priority": 1,
+                "has_children": False,
+                "dependencies": [],
+                "schemas": {
+                    "type": "stdio",
+                    "method": "system_info"
+                },
+                "input_data": {
+                    "resource": "cpu"
+                }
+            },
+            {
+                "id": "memory-info",
+                "parent_id": "system-resources-root",
+                "user_id": user_id,
+                "name": "Get Memory Information",
+                "status": "pending",
+                "priority": 1,
+                "has_children": False,
+                "dependencies": [],
+                "schemas": {
+                    "type": "stdio",
+                    "method": "system_info"
+                },
+                "input_data": {
+                    "resource": "memory"
+                }
+            },
+            {
+                "id": "disk-info",
+                "parent_id": "system-resources-root",
+                "user_id": user_id,
+                "name": "Get Disk Information",
+                "status": "pending",
+                "priority": 1,
+                "has_children": False,
+                "dependencies": [],
+                "schemas": {
+                    "type": "stdio",
+                    "method": "system_info"
+                },
+                "input_data": {
+                    "resource": "disk"
+                }
+            }
+        ]
+        
+        context = self._create_request_context(tasks)
+        
+        # Execute in simple mode with real database
+        with patch('aipartnerupflow.api.agent_executor.get_default_session') as mock_get_session:
+            mock_get_session.return_value = sync_db_session
+            
+            # Execute
+            result = await executor.execute(context, mock_event_queue)
+            logger.info(f"==result==\n {json.dumps(result, indent=4)}")
+            # Verify result structure - result should contain task tree execution status
+            assert result is not None
+            assert "status" in result
+            assert result["status"] == "completed"
+            assert "root_task_id" in result
+
+            
+            # Verify all tasks were created and executed
+            repo = TaskRepository(sync_db_session)
+            
+            # Check root task
+            root_task = await repo.get_task_by_id("system-resources-root")
+            assert root_task is not None
+            assert root_task.status == "completed"
+            assert root_task.result is not None
+            
+            # Check child tasks
+            cpu_task = await repo.get_task_by_id("cpu-info")
+            assert cpu_task is not None
+            assert cpu_task.status == "completed"
+            assert cpu_task.result is not None
+            # Verify CPU info is in result
+            cpu_result = cpu_task.result
+            assert isinstance(cpu_result, dict)
+            assert "system" in cpu_result or "cores" in cpu_result
+            
+            memory_task = await repo.get_task_by_id("memory-info")
+            assert memory_task is not None
+            assert memory_task.status == "completed"
+            assert memory_task.result is not None
+            
+            disk_task = await repo.get_task_by_id("disk-info")
+            assert disk_task is not None
+            assert disk_task.status == "completed"
+            assert disk_task.result is not None
+            
+            # Verify parent task merged results
+            root_result = root_task.result
+            assert isinstance(root_result, dict)
+            
+            # Check aggregated result structure
+            assert "summary" in root_result
+            assert "resources" in root_result
+            assert "resource_count" in root_result
+            assert root_result["resource_count"] == 3  # cpu, memory, disk
+            
+            # Verify each resource is in the aggregated result
+            resources = root_result["resources"]
+            assert "cpu-info" in resources or any("cpu" in k.lower() for k in resources.keys())
+            assert "memory-info" in resources or any("memory" in k.lower() or "mem" in k.lower() for k in resources.keys())
+            assert "disk-info" in resources or any("disk" in k.lower() for k in resources.keys())
+            
+            # Verify event queue was called
+            assert mock_event_queue.enqueue_event.called
+            
+            # Query and display complete task tree data
+            task_tree = await repo.build_task_tree(root_task)
+            
+            # Convert TaskTreeNode to dictionary format for JSON display
+            def tree_node_to_dict(node):
+                """Convert TaskTreeNode to dictionary"""
+                task_dict = node.task.to_dict()
+                if node.children:
+                    task_dict["children"] = [tree_node_to_dict(child) for child in node.children]
+                return task_dict
+            
+            task_tree_dict = tree_node_to_dict(task_tree)
+            
+            # Display task tree as JSON
+            logger.info("==Task Tree Data (JSON)==\n" + json.dumps(task_tree_dict, indent=2, ensure_ascii=False))
+            
+            # Verify task tree structure
+            assert "children" in task_tree_dict
+            assert len(task_tree_dict["children"]) == 3  # cpu-info, memory-info, disk-info
+            
+            # Verify each child task has result
+            child_ids = [child["id"] for child in task_tree_dict["children"]]
+            assert "cpu-info" in child_ids
+            assert "memory-info" in child_ids
+            assert "disk-info" in child_ids
+            
+            for child in task_tree_dict["children"]:
+                assert child["status"] == "completed"
+                assert child["result"] is not None
 
