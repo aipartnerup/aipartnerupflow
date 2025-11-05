@@ -1,0 +1,53 @@
+"""
+Unified decorators for aipartnerupflow
+
+This module provides a single entry point for all decorators used in aipartnerupflow.
+Similar to Flask's app decorators (@app.before_request, @app.route, etc.), this module
+provides a clean, unified API for registering hooks and extensions.
+
+All decorators are part of the core framework and can be imported from:
+    from aipartnerupflow import register_pre_hook, register_post_hook, extension_register
+    
+Or directly from core:
+    from aipartnerupflow.core.decorators import register_pre_hook
+
+Usage:
+    from aipartnerupflow import register_pre_hook, register_post_hook, extension_register
+    
+    @register_pre_hook
+    async def my_pre_hook(task):
+        ...
+    
+    @register_post_hook
+    async def my_post_hook(task, input_data, result):
+        ...
+    
+    @extension_register()
+    class MyExecutor(BaseTask):
+        ...
+"""
+
+# Re-export configuration decorators
+from aipartnerupflow.core.config import (
+    register_pre_hook,
+    register_post_hook,
+    set_task_model_class,
+    get_task_model_class,
+    clear_config,
+)
+
+# Re-export extension decorator
+from aipartnerupflow.core.extensions.decorators import extension_register
+
+__all__ = [
+    # Hook decorators
+    "register_pre_hook",
+    "register_post_hook",
+    # TaskModel configuration
+    "set_task_model_class",
+    "get_task_model_class",
+    "clear_config",
+    # Extension registration
+    "extension_register",
+]
+

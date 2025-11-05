@@ -31,6 +31,24 @@ logger = get_logger(__name__)
 start_time = time.time()
 logger.info("Starting aipartnerupflow service")
 
+# Auto-discover built-in extensions (optional, extensions register via @extension_register decorator)
+# This ensures extensions are available when TaskManager is used
+try:
+    from aipartnerupflow.extensions.stdio import StdioExecutor  # noqa: F401
+    logger.debug("Discovered stdio extension")
+except ImportError:
+    logger.debug("Stdio extension not available (optional)")
+except Exception as e:
+    logger.warning(f"Failed to discover stdio extension: {e}")
+
+try:
+    from aipartnerupflow.extensions.crewai import CrewManager  # noqa: F401
+    logger.debug("Discovered crewai extension")
+except ImportError:
+    logger.debug("CrewAI extension not available (requires [crewai] extra)")
+except Exception as e:
+    logger.warning(f"Failed to discover crewai extension: {e}")
+
 
 def main():
     """Main entry point for API service (can be called via entry point)"""
@@ -51,31 +69,35 @@ def main():
     # Optional: Load custom TaskModel class from environment or module
     # Users can set AIPARTNERUPFLOW_TASK_MODEL_CLASS to import their custom model
     # Example: AIPARTNERUPFLOW_TASK_MODEL_CLASS="my_project.models.MyTaskModel"
-    task_model_class = None
     task_model_class_path = os.getenv("AIPARTNERUPFLOW_TASK_MODEL_CLASS")
     if task_model_class_path:
         try:
             from importlib import import_module
+            from aipartnerupflow import set_task_model_class
             module_path, class_name = task_model_class_path.rsplit(".", 1)
             module = import_module(module_path)
             task_model_class = getattr(module, class_name)
+            set_task_model_class(task_model_class)
             logger.info(f"Loaded custom TaskModel: {task_model_class_path}")
         except Exception as e:
             logger.warning(f"Failed to load custom TaskModel from {task_model_class_path}: {e}")
+    
+    # Get TaskModel class from registry for logging
+    from aipartnerupflow.core.config import get_task_model_class
+    task_model_class = get_task_model_class()
     
     # Create A2A server with configuration (from env vars or defaults)
     logger.info(
         f"Service configuration: "
         f"JWT enabled={bool(jwt_secret_key)}, "
         f"System routes={enable_system_routes}, "
-        f"TaskModel={task_model_class.__name__ if task_model_class else 'TaskModel'}"
+        f"TaskModel={task_model_class.__name__}"
     )
     a2a_server_instance = create_a2a_server(
         verify_token_secret_key=jwt_secret_key,
         verify_token_algorithm=jwt_algorithm,
         base_url=base_url,
         enable_system_routes=enable_system_routes,
-        task_model_class=task_model_class,
     )
     
     # Build and run A2A server

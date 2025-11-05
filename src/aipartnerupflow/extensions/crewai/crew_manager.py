@@ -11,12 +11,14 @@ from pydantic import BaseModel
 from crewai import Crew as CrewAI
 from crewai.agent import Agent
 from crewai.task import Task
-from aipartnerupflow.core.interfaces.plugin import BaseTask
+from aipartnerupflow.core.base import BaseTask
+from aipartnerupflow.core.extensions.decorators import extension_register
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
+@extension_register()
 class CrewManager(BaseTask):
     """
     CrewManager class for executing agent crews (LLM-based via CrewAI)
@@ -33,11 +35,16 @@ class CrewManager(BaseTask):
     """
     
     # Crew definition properties
-    id: str = ""
-    name: str = ""
-    description: str = ""
+    id: str = "crewai_executor"
+    name: str = "CrewAI Executor"
+    description: str = "LLM-based agent crew execution via CrewAI"
     tags: list[str] = []
     examples: list[str] = []
+    
+    @property
+    def type(self) -> str:
+        """Extension type identifier for categorization"""
+        return "crewai"
     
     def __init__(
         self,

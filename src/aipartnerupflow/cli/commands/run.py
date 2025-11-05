@@ -44,7 +44,7 @@ def flow(
         typer.echo(f"Inputs: {json.dumps(inputs_dict, indent=2)}")
         
         # TODO: Implement actual batch execution
-        # Requires [crewai] extra: from aipartnerupflow.features.crewai import BatchManager
+        # Requires [crewai] extra: from aipartnerupflow.extensions.crewai import BatchManager
         # batch = BatchManager(id=batch_id)
         # result = await batch.execute(inputs=inputs_dict)
         

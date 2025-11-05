@@ -12,12 +12,14 @@ from inspect import iscoroutinefunction
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.execution.streaming_callbacks import StreamingCallbacks
+from aipartnerupflow.core.extensions import get_registry, ExtensionCategory
 from aipartnerupflow.core.types import (
     TaskTreeNode,
     TaskPreHook,
     TaskPostHook,
     TaskStatus,
 )
+from aipartnerupflow.core.config import get_pre_hooks, get_post_hooks, get_task_model_class
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -61,12 +63,16 @@ class TaskManager:
         self.db = db
         self.is_async = isinstance(db, AsyncSession)
         self.root_task_id = root_task_id
-        self.task_repository = TaskRepository(db)
+        # Get task_model_class from config registry (supports custom TaskModel via decorators)
+        task_model_class = get_task_model_class() or TaskModel
+        self.task_repository = TaskRepository(db, task_model_class=task_model_class)
         self.streaming_callbacks = StreamingCallbacks(root_task_id=self.root_task_id)
         self.stream = False
         self.streaming_final = False
-        self.pre_hooks = pre_hooks or []
-        self.post_hooks = post_hooks or []
+        # Use provided hooks or fall back to config registry
+        # This allows hooks to be registered globally via decorators
+        self.pre_hooks = pre_hooks if pre_hooks is not None else get_pre_hooks()
+        self.post_hooks = post_hooks if post_hooks is not None else get_post_hooks()
 
     
     async def distribute_task_tree(
@@ -371,14 +377,32 @@ class TaskManager:
             
             # Execute pre-hooks (after dependency resolution, to allow user adjustment based on complete data)
             # Pre-hooks can access and modify task.input_data directly
+            # Store input_data before pre-hooks to detect changes (deep copy for nested dicts)
+            import copy
+            input_data_before_pre_hooks = copy.deepcopy(task.input_data) if task.input_data else {}
             await self._execute_pre_hooks(task)
             
             # Update input data if pre-hooks modified task.input_data
-            if task.input_data != resolved_input_data:
-                await self.task_repository.update_task_input_data(task.id, task.input_data)
+            # Use deep comparison to detect any changes (including nested dict modifications)
+            input_data_after_pre_hooks = task.input_data or {}
+            # Deep comparison to detect changes in nested structures
+            if input_data_after_pre_hooks != input_data_before_pre_hooks:
+                # Pre-hooks modified input_data, update database
+                # Make a deep copy to ensure we're saving the current state
+                input_data_to_save = copy.deepcopy(input_data_after_pre_hooks) if input_data_after_pre_hooks else {}
+                logger.info(
+                    f"Pre-hooks modified input_data for task {task.id}: "
+                    f"before_keys={list(input_data_before_pre_hooks.keys())}, "
+                    f"after_keys={list(input_data_after_pre_hooks.keys())}"
+                )
+                await self.task_repository.update_task_input_data(task.id, input_data_to_save)
+                # Refresh task object to get latest state from database
                 task = await self.task_repository.get_task_by_id(task.id)
                 if not task:
                     raise ValueError(f"Task {task.id} not found after pre-hook input data update")
+                logger.info(f"Pre-hooks modified input_data for task {task.id}, updated in database")
+            else:
+                logger.debug(f"Pre-hooks did not modify input_data for task {task.id}")
             
             # Execute task using agent executor
             # Use task.input_data (which may have been modified by pre-hooks)
@@ -674,8 +698,31 @@ class TaskManager:
             refreshed_task = await self.task_repository.get_task_by_id(completed_task.id)
             if refreshed_task and refreshed_task.status == "completed":
                 # Get the input_data that was used for execution
+                # This should include pre-hook modifications since they were saved to DB
+                # Use refreshed_task.input_data which contains the latest data from database
+                logger.info(
+                    f"Loading task {completed_task.id} from DB for post-hook: "
+                    f"input_data_type={type(refreshed_task.input_data)}, "
+                    f"input_data_keys={list(refreshed_task.input_data.keys()) if refreshed_task.input_data else []}, "
+                    f"input_data_value={refreshed_task.input_data}"
+                )
                 input_data = refreshed_task.input_data or {}
                 result = refreshed_task.result
+                
+                # Ensure we're passing the actual input_data dict (not a reference that might be stale)
+                # Make a copy to ensure we're passing the current state
+                # If input_data is already a dict, create a shallow copy; otherwise convert to dict
+                if isinstance(input_data, dict):
+                    input_data = dict(input_data)
+                else:
+                    # Handle case where input_data might be a JSON string or other type
+                    input_data = dict(input_data) if input_data else {}
+                
+                logger.info(
+                    f"Post-hook input_data for task {refreshed_task.id}: "
+                    f"keys={list(input_data.keys())}, has_pre_hook_marker={input_data.get('_pre_hook_executed', False)}, "
+                    f"input_data_type={type(input_data)}, input_data_value={input_data}"
+                )
                 
                 await self._execute_post_hooks(refreshed_task, input_data, result)
             else:
@@ -736,12 +783,18 @@ class TaskManager:
         """
         Execute task based on schemas configuration
         
+        Uses the executor registry to find and instantiate the appropriate executor
+        based on task_type in schemas. Supports both built-in and third-party executors.
+        
         Args:
             task: Task to execute
             input_data: Input data for task execution
             
         Returns:
             Task execution result
+        
+        Raises:
+            ValueError: If task_type is not registered in executor registry
         """
         schemas = task.schemas or {}
         task_type = schemas.get("type", "stdio")
@@ -749,51 +802,81 @@ class TaskManager:
         
         logger.info(f"Executing task {task.id} with type={task_type}, method={task_method}")
         
-        if task_type == "stdio":
-            # Use stdio executor (MCP-style process execution)
-            try:
-                from aipartnerupflow.features.stdio import StdioExecutor
-                executor = StdioExecutor()
-                
-                # Merge method into input_data
-                execution_inputs = input_data.copy()
-                execution_inputs["method"] = task_method
-                
-                # If method is system_info and resource is not specified, try to infer from task name
-                if task_method == "system_info" and "resource" not in execution_inputs:
-                    task_name_lower = task.name.lower()
-                    if "cpu" in task_name_lower:
-                        execution_inputs["resource"] = "cpu"
-                    elif "memory" in task_name_lower or "mem" in task_name_lower:
-                        execution_inputs["resource"] = "memory"
-                    elif "disk" in task_name_lower:
-                        execution_inputs["resource"] = "disk"
-                    else:
-                        execution_inputs["resource"] = "all"
-                
-                # Handle aggregate_results method for merging dependency results
-                if task_method == "aggregate_results":
-                    return self._aggregate_dependency_results(task, input_data)
-                
-                result = await executor.execute(execution_inputs)
-                return result
-            except ImportError:
-                logger.warning("Stdio executor not available, using placeholder")
-                return {
-                    "message": "Stdio executor not available",
-                    "task_id": task.id,
-                    "name": task.name,
-                    "input_data": input_data
-                }
-        else:
-            # Placeholder for other task types (e.g., crew, http, etc.)
-            logger.info(f"Task type {task_type} not yet implemented, using placeholder")
+        # Get executor from unified extension registry
+        registry = get_registry()
+        extension = registry.get_by_type(ExtensionCategory.EXECUTOR, task_type)
+        
+        if extension is None:
+            # Task type not registered
+            registered_extensions = registry.list_by_category(ExtensionCategory.EXECUTOR)
+            error_msg = (
+                f"Task type '{task_type}' is not registered. "
+                f"Registered executor types: {[ext.type for ext in registry.get_all_by_category(ExtensionCategory.EXECUTOR) if ext.type]}. "
+                f"Please register an executor for this task type using "
+                f"register_extension(YourExecutorInstance, executor_class=YourExecutorClass)."
+            )
+            logger.error(error_msg)
             return {
-                "message": f"Task execution for type '{task_type}' not yet implemented",
+                "error": error_msg,
                 "task_id": task.id,
                 "name": task.name,
+                "task_type": task_type,
+                "registered_types": [ext.type for ext in registry.get_all_by_category(ExtensionCategory.EXECUTOR) if ext.type],
                 "input_data": input_data,
                 "schemas": schemas
+            }
+        
+        # Create executor instance for this task execution
+        executor = registry.create_executor_instance(extension.id, inputs=input_data)
+        
+        if executor is None:
+            error_msg = f"Failed to create executor instance for extension '{extension.id}'"
+            logger.error(error_msg)
+            return {
+                "error": error_msg,
+                "task_id": task.id,
+                "name": task.name,
+                "task_type": task_type,
+                "extension_id": extension.id,
+                "input_data": input_data,
+                "schemas": schemas
+            }
+        
+        # Prepare execution inputs
+        execution_inputs = input_data.copy()
+        execution_inputs["method"] = task_method
+        
+        # Special handling for stdio executor (backward compatibility)
+        if task_type == "stdio":
+            # If method is system_info and resource is not specified, try to infer from task name
+            if task_method == "system_info" and "resource" not in execution_inputs:
+                task_name_lower = task.name.lower()
+                if "cpu" in task_name_lower:
+                    execution_inputs["resource"] = "cpu"
+                elif "memory" in task_name_lower or "mem" in task_name_lower:
+                    execution_inputs["resource"] = "memory"
+                elif "disk" in task_name_lower:
+                    execution_inputs["resource"] = "disk"
+                else:
+                    execution_inputs["resource"] = "all"
+            
+            # Handle aggregate_results method for merging dependency results
+            if task_method == "aggregate_results":
+                return self._aggregate_dependency_results(task, input_data)
+        
+        # Execute task
+        try:
+            result = await executor.execute(execution_inputs)
+            return result
+        except Exception as e:
+            logger.error(f"Error executing task {task.id} with executor {executor.__class__.__name__}: {e}", exc_info=True)
+            return {
+                "error": str(e),
+                "task_id": task.id,
+                "name": task.name,
+                "task_type": task_type,
+                "executor": executor.__class__.__name__,
+                "input_data": input_data
             }
     
     def _aggregate_dependency_results(

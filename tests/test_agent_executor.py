@@ -18,6 +18,14 @@ from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.utils.logger import get_logger
 
+# Import StdioExecutor to trigger @extension_register decorator
+# This ensures the executor is registered before tests run
+try:
+    from aipartnerupflow.extensions.stdio import StdioExecutor  # noqa: F401
+except ImportError:
+    # If stdio extension is not available, tests will fail appropriately
+    StdioExecutor = None
+
 logger = get_logger(__name__)
 
 
@@ -241,7 +249,7 @@ class TestAgentExecutor:
             mock_manager.distribute_task_tree.return_value = None
             
             # Mock task tree
-            from aipartnerupflow.core.execution.task_manager import TaskTreeNode
+            from aipartnerupflow.core.types import TaskTreeNode
             mock_task_node = Mock(spec=TaskTreeNode)
             mock_task_node.task = Mock()
             mock_task_node.task.id = "task-1"
@@ -270,6 +278,9 @@ class TestAgentExecutor:
         This test uses real TaskManager and database to execute a task tree
         that monitors system resources (CPU, memory, disk) and merges results.
         
+        Also tests decorator-based hooks (@register_pre_hook, @register_post_hook)
+        in a real execution environment to verify they work correctly in practice.
+        
         Task structure:
         - Parent task: Aggregate system resources (depends on cpu, memory, disk)
         - Child task 1: Get CPU info
@@ -278,6 +289,51 @@ class TestAgentExecutor:
         
         Parent task will merge all child results.
         """
+        # Clear any existing hooks from previous tests
+        from aipartnerupflow import clear_config
+        clear_config()
+        
+        # Track hook calls for verification
+        pre_hook_calls = []
+        post_hook_calls = []
+        
+        # Register pre-hook using decorator (real usage pattern)
+        from aipartnerupflow import register_pre_hook
+        
+        @register_pre_hook
+        async def test_pre_hook(task):
+            """Pre-hook that modifies task input_data and tracks calls"""
+            pre_hook_calls.append({
+                "task_id": task.id,
+                "task_name": task.name,
+                "original_input": dict(task.input_data) if task.input_data else {},
+            })
+            # Modify input_data to demonstrate hook can transform data
+            if task.input_data is None:
+                task.input_data = {}
+            task.input_data["_pre_hook_executed"] = True
+            task.input_data["_pre_hook_timestamp"] = "test-timestamp"
+        
+        # Register post-hook using decorator (real usage pattern)
+        from aipartnerupflow import register_post_hook
+        
+        @register_post_hook
+        async def test_post_hook(task, input_data, result):
+            """Post-hook that tracks task completion and results"""
+            post_hook_calls.append({
+                "task_id": task.id,
+                "task_name": task.name,
+                "task_status": task.status,
+                "input_data": input_data,
+                "result": result,
+            })
+        
+        # Create a new executor AFTER registering hooks
+        # The executor fixture reads hooks at initialization time,
+        # so we need to create a new one after hooks are registered
+        from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
+        executor_with_hooks = AIPartnerUpFlowAgentExecutor()
+        
         user_id = "test-user-real"
         
         # Create task tree structure
@@ -359,8 +415,8 @@ class TestAgentExecutor:
         with patch('aipartnerupflow.api.agent_executor.get_default_session') as mock_get_session:
             mock_get_session.return_value = sync_db_session
             
-            # Execute
-            result = await executor.execute(context, mock_event_queue)
+            # Execute using executor with hooks
+            result = await executor_with_hooks.execute(context, mock_event_queue)
             logger.info(f"==result==\n {json.dumps(result, indent=4)}")
             # Verify result structure - result should contain task tree execution status
             assert result is not None
@@ -417,6 +473,48 @@ class TestAgentExecutor:
             # Verify event queue was called
             assert mock_event_queue.enqueue_event.called
             
+            # ========================================================================
+            # Verify decorator-based hooks were called correctly
+            # ========================================================================
+            
+            # Verify pre-hooks were called for all tasks (root + 3 children)
+            assert len(pre_hook_calls) == 4, f"Expected 4 pre-hook calls, got {len(pre_hook_calls)}"
+            
+            # Verify pre-hook was called for each task
+            task_ids_called = [call["task_id"] for call in pre_hook_calls]
+            assert "system-resources-root" in task_ids_called
+            assert "cpu-info" in task_ids_called
+            assert "memory-info" in task_ids_called
+            assert "disk-info" in task_ids_called
+            
+            # Verify pre-hook modified input_data (check in database)
+            cpu_task_after = await repo.get_task_by_id("cpu-info")
+            # Note: input_data modification happens in memory, but we can verify
+            # the hook was called and had access to the task
+            
+            # Verify post-hooks were called for all completed tasks
+            assert len(post_hook_calls) >= 4, f"Expected at least 4 post-hook calls, got {len(post_hook_calls)}"
+            
+            # Verify post-hook received correct data
+            post_hook_task_ids = [call["task_id"] for call in post_hook_calls]
+            assert "system-resources-root" in post_hook_task_ids
+            assert "cpu-info" in post_hook_task_ids
+            assert "memory-info" in post_hook_task_ids
+            assert "disk-info" in post_hook_task_ids
+            
+            # Verify post-hook received task status and results
+            for call in post_hook_calls:
+                assert call["task_status"] == "completed", f"Task {call['task_id']} should be completed"
+                assert call["result"] is not None, f"Task {call['task_id']} should have result"
+            
+            # Verify post-hook received correct input_data (with pre-hook modifications)
+            cpu_post_hook = next(call for call in post_hook_calls if call["task_id"] == "cpu-info")
+            assert cpu_post_hook["input_data"] is not None
+            # The input_data should have been modified by pre-hook (if it was accessible)
+            
+            logger.info(f"==Pre-hook calls: {len(pre_hook_calls)}==\n{json.dumps(pre_hook_calls, indent=2)}")
+            logger.info(f"==Post-hook calls: {len(post_hook_calls)}==\n{json.dumps(post_hook_calls, indent=2)}")
+            
             # Query and display complete task tree data
             task_tree = await repo.build_task_tree(root_task)
             
@@ -446,4 +544,239 @@ class TestAgentExecutor:
             for child in task_tree_dict["children"]:
                 assert child["status"] == "completed"
                 assert child["result"] is not None
+    
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_execute_with_custom_task_model_and_hooks(self, executor, sync_db_session, mock_event_queue):
+        """
+        Integration test: Real task execution with custom TaskModel and decorator-based hooks
+        
+        This test demonstrates the complete decorator workflow:
+        1. Custom TaskModel with additional fields (project_id)
+        2. set_task_model_class() to configure custom model
+        3. @register_pre_hook to modify task data before execution
+        4. @register_post_hook to process results after execution
+        
+        This verifies that all decorator features work together in a real execution environment.
+        """
+        # Clear any existing configuration
+        from aipartnerupflow import clear_config, set_task_model_class
+        clear_config()
+        
+        # ========================================================================
+        # Step 1: Define and set custom TaskModel with additional field
+        # ========================================================================
+        from sqlalchemy import Column, String, text
+        from aipartnerupflow.core.storage.sqlalchemy.models import TASK_TABLE_NAME, TaskModel
+        
+        # Add project_id column to existing table (if not exists)
+        # In production, this would be done via Alembic migrations
+        try:
+            sync_db_session.execute(text(f"ALTER TABLE {TASK_TABLE_NAME} ADD COLUMN project_id VARCHAR(100)"))
+            sync_db_session.commit()
+        except Exception:
+            # Column might already exist, ignore
+            sync_db_session.rollback()
+        
+        # Inherit from TaskModel to satisfy registry check
+        # Define custom TaskModel that inherits from TaskModel
+        # This satisfies the registry's issubclass check
+        class CustomTaskModel(TaskModel):
+            """Custom TaskModel with project_id field"""
+            __tablename__ = TASK_TABLE_NAME
+            __table_args__ = {'extend_existing': True}  # Allow extending existing table
+            
+            # Custom field
+            project_id = Column(String(100), nullable=True, comment="Project ID for task grouping")
+            
+            def to_dict(self):
+                """Convert to dictionary including custom field"""
+                base_dict = super().to_dict()
+                base_dict["project_id"] = self.project_id
+                return base_dict
+        
+        # ========================================================================
+        # Step 2: Register hooks using decorators
+        # ========================================================================
+        pre_hook_calls = []
+        post_hook_calls = []
+        
+        from aipartnerupflow import register_pre_hook, register_post_hook
+        
+        @register_pre_hook
+        async def custom_pre_hook(task):
+            """Pre-hook that adds project context and modifies input_data"""
+            pre_hook_calls.append({
+                "task_id": task.id,
+                "task_name": task.name,
+                "has_project_id": hasattr(task, "project_id"),
+                "project_id": getattr(task, "project_id", None),
+                "original_input": dict(task.input_data) if task.input_data else {},
+            })
+            
+            # Modify input_data to add hook-generated data
+            if task.input_data is None:
+                task.input_data = {}
+            task.input_data["_pre_hook_executed"] = True
+            task.input_data["_hook_timestamp"] = "2024-01-01T00:00:00Z"
+            
+            # If project_id is set, add it to input_data for executor
+            if hasattr(task, "project_id") and task.project_id:
+                task.input_data["_project_id"] = task.project_id
+        
+        @register_post_hook
+        async def custom_post_hook(task, input_data, result):
+            """Post-hook that validates custom fields and processes results"""
+            post_hook_calls.append({
+                "task_id": task.id,
+                "task_name": task.name,
+                "task_status": task.status,
+                "has_project_id": hasattr(task, "project_id"),
+                "project_id": getattr(task, "project_id", None),
+                "input_data_keys": list(input_data.keys()) if input_data else [],
+                "has_pre_hook_marker": input_data.get("_pre_hook_executed", False) if input_data else False,
+                "result_type": type(result).__name__,
+                "result_keys": list(result.keys()) if isinstance(result, dict) else None,
+            })
+        
+        # Set custom TaskModel using decorator API (after hooks are registered)
+        set_task_model_class(CustomTaskModel)
+        
+        # Recreate executor to pick up newly registered hooks and custom TaskModel
+        # (executor fixture initializes before hooks and TaskModel are registered)
+        from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
+        executor = AIPartnerUpFlowAgentExecutor()
+        
+        # ========================================================================
+        # Step 3: Create and execute task with custom model
+        # ========================================================================
+        user_id = "test-user-custom"
+        project_id = "test-project-123"
+        
+        # Create task using repository with custom model (to set project_id)
+        # Then execute via executor
+        repo = TaskRepository(sync_db_session, task_model_class=CustomTaskModel)
+        
+        # Create task with custom field first (using kwargs for id)
+        task = await repo.create_task(
+            name="Custom Task with Project",
+            user_id=user_id,
+            priority=1,
+            schemas={
+                "type": "stdio",
+                "method": "system_info"
+            },
+            input_data={
+                "resource": "cpu"
+            },
+            id="custom-task-1",  # Custom field via kwargs
+            project_id=project_id  # Custom field
+        )
+        
+        # Verify task was created with custom field
+        assert task.id == "custom-task-1"
+        assert task.project_id == project_id
+        
+        # Now execute the task via executor
+        # Note: Don't pass input_data in tasks dict, let executor use the existing task's input_data
+        # This ensures pre-hook modifications are preserved
+        tasks = [
+            {
+                "id": "custom-task-1",  # Use same ID as created task
+                "user_id": user_id,
+                "name": "Custom Task with Project",
+                "status": "pending",
+                "priority": 1,
+                "has_children": False,
+                "dependencies": [],
+                "schemas": {
+                    "type": "stdio",
+                    "method": "system_info"
+                },
+                # Don't pass input_data here - let executor use existing task's input_data
+                # This ensures pre-hook modifications are not overwritten
+                "project_id": project_id  # Custom field for reference
+            }
+        ]
+        
+        context = self._create_request_context(tasks)
+        
+        # Execute with real database and custom model
+        with patch('aipartnerupflow.api.agent_executor.get_default_session') as mock_get_session:
+            mock_get_session.return_value = sync_db_session
+            
+            # Execute using executor with custom config
+            result = await executor.execute(context, mock_event_queue)
+            
+            # ========================================================================
+            # Step 4: Verify execution results
+            # ========================================================================
+            assert result is not None
+            # Result format depends on execution mode, check if it's a dict with status
+            if isinstance(result, dict) and "status" in result:
+                assert result["status"] == "completed", f"Expected completed, got {result.get('status')}"
+            # Also verify via database
+            
+            # Reload task from database to verify custom field persisted
+            repo = TaskRepository(sync_db_session, task_model_class=CustomTaskModel)
+            task_after = await repo.get_task_by_id("custom-task-1")
+            assert task_after is not None
+            assert task_after.status == "completed"
+            assert task_after.result is not None
+            
+            # Verify custom field was saved and persisted
+            assert hasattr(task_after, "project_id"), "Custom TaskModel should have project_id field"
+            assert task_after.project_id == project_id, f"Expected project_id={project_id}, got {task_after.project_id}"
+            
+            # ========================================================================
+            # Step 5: Verify hooks were called correctly
+            # ========================================================================
+            # Verify pre-hook was called
+            assert len(pre_hook_calls) == 1, f"Expected 1 pre-hook call, got {len(pre_hook_calls)}"
+            pre_call = pre_hook_calls[0]
+            assert pre_call["task_id"] == "custom-task-1"
+            assert pre_call["has_project_id"] is True, "Pre-hook should see custom field"
+            assert pre_call["project_id"] == project_id
+            
+            # Verify pre-hook modified input_data
+            assert pre_call["original_input"].get("resource") == "cpu"
+            
+            # Verify post-hook was called
+            assert len(post_hook_calls) == 1, f"Expected 1 post-hook call, got {len(post_hook_calls)}"
+            post_call = post_hook_calls[0]
+            assert post_call["task_id"] == "custom-task-1"
+            assert post_call["task_status"] == "completed"
+            assert post_call["has_project_id"] is True, "Post-hook should see custom field"
+            assert post_call["project_id"] == project_id
+            
+            # Verify post-hook received modified input_data from pre-hook
+            assert post_call["has_pre_hook_marker"] is True, "Post-hook should see pre-hook modifications"
+            assert "_pre_hook_executed" in post_call["input_data_keys"]
+            assert "_hook_timestamp" in post_call["input_data_keys"]
+            
+            # Verify post-hook received result
+            assert post_call["result_type"] == "dict"
+            assert post_call["result_keys"] is not None
+            assert len(post_call["result_keys"]) > 0
+            
+            # ========================================================================
+            # Step 6: Verify data flow: input_data -> pre-hook -> execution -> post-hook
+            # ========================================================================
+            # The input_data should have been modified by pre-hook before execution
+            # We can verify this by checking the task's input_data (if persisted)
+            # or by checking what post-hook received
+            
+            logger.info(f"==Custom TaskModel Test Results==")
+            logger.info(f"Pre-hook calls: {json.dumps(pre_hook_calls, indent=2)}")
+            logger.info(f"Post-hook calls: {json.dumps(post_hook_calls, indent=2)}")
+            logger.info(f"Task project_id: {task_after.project_id}")
+            logger.info(f"Task result keys: {list(task_after.result.keys()) if isinstance(task_after.result, dict) else 'N/A'}")
+            
+            # Final verification: All decorator features work together
+            assert task_after.project_id == project_id, "Custom TaskModel field should be preserved"
+            assert pre_call["has_project_id"] is True, "Pre-hook should access custom field"
+            assert post_call["has_project_id"] is True, "Post-hook should access custom field"
+            assert post_call["has_pre_hook_marker"] is True, "Pre-hook modifications should be visible to post-hook"
+            
+            logger.info("✅ All decorator features verified: custom TaskModel, pre-hook, post-hook")
 

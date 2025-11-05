@@ -7,7 +7,8 @@ from unittest.mock import Mock, AsyncMock, patch
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aipartnerupflow.core.execution.task_manager import TaskManager, TaskTreeNode
+from aipartnerupflow.core.execution.task_manager import TaskManager
+from aipartnerupflow.core.types import TaskTreeNode
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 
 

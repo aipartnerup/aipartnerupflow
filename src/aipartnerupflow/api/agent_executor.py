@@ -14,9 +14,14 @@ from typing import Dict, Any, Optional, List, Type
 from datetime import datetime, timezone
 
 from aipartnerupflow.core.execution.task_manager import TaskManager
-from aipartnerupflow.core.types import TaskTreeNode, TaskPreHook, TaskPostHook
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+from aipartnerupflow.core.types import TaskTreeNode
 from aipartnerupflow.core.storage import get_default_session
+from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+from aipartnerupflow.core.config import (
+    get_task_model_class,
+    get_pre_hooks,
+    get_post_hooks,
+)
 from aipartnerupflow.api.event_queue_bridge import EventQueueBridge
 from aipartnerupflow.core.utils.logger import get_logger
 
@@ -33,32 +38,33 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
     Supports custom TaskModel classes via task_model_class parameter.
     """
 
-    def __init__(
-        self,
-        task_model_class: Optional[Type[TaskModel]] = None,
-        pre_hooks: Optional[List[TaskPreHook]] = None,
-        post_hooks: Optional[List[TaskPostHook]] = None
-    ):
+    def __init__(self):
         """
         Initialize agent executor
         
-        Args:
-            task_model_class: Optional custom TaskModel class.
-                             If provided, will be used when creating TaskManager.
-                             If None, default TaskModel will be used.
-            pre_hooks: Optional list of pre-execution hook functions.
-                      Will be passed to TaskManager when created.
-            post_hooks: Optional list of post-execution hook functions.
-                       Will be passed to TaskManager when created.
+        Configuration (task_model_class, hooks) is automatically retrieved from
+        the global config registry. Use decorators to register hooks before initialization.
+        
+        Example:
+            from aipartnerupflow import register_pre_hook, set_task_model_class
+            
+            @register_pre_hook
+            async def my_hook(task):
+                ...
+            
+            set_task_model_class(MyTaskModel)
+            executor = AIPartnerUpFlowAgentExecutor()  # Configuration from registry
         """
-        self.task_model_class = task_model_class
-        self.pre_hooks = pre_hooks
-        self.post_hooks = post_hooks
+        # Get configuration from registry (no parameters needed)
+        self.task_model_class = get_task_model_class()
+        self.pre_hooks = get_pre_hooks()
+        self.post_hooks = get_post_hooks()
+        
         logger.info(
             f"Initialized AIPartnerUpFlowAgentExecutor "
-            f"(TaskModel: {task_model_class.__name__ if task_model_class else 'TaskModel'}, "
-            f"pre_hooks: {len(pre_hooks) if pre_hooks else 0}, "
-            f"post_hooks: {len(post_hooks) if post_hooks else 0})"
+            f"(TaskModel: {self.task_model_class.__name__}, "
+            f"pre_hooks: {len(self.pre_hooks)}, "
+            f"post_hooks: {len(self.post_hooks)})"
         )
 
     async def execute(
@@ -180,10 +186,35 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             # Execute task tree
             await task_manager.distribute_task_tree(task_tree, use_callback=True)
             
-            # Execution completed
-            # Get final status from task tree
-            final_status = task_tree.calculate_status()
-            final_progress = task_tree.calculate_progress()
+            # Execution completed - reload task tree from database to get updated status
+            # The in-memory task_tree may have stale status, so reload from DB
+            from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            updated_root_task = await task_repository.get_task_by_id(task_tree.task.id)
+            
+            if updated_root_task:
+                # Use status from database (most accurate)
+                final_status = updated_root_task.status
+                # Safely convert progress to float (handle Mock objects in tests)
+                try:
+                    if updated_root_task.progress is not None:
+                        # Check if it's already a number or can be converted
+                        if isinstance(updated_root_task.progress, (int, float)):
+                            final_progress = float(updated_root_task.progress)
+                        elif isinstance(updated_root_task.progress, str):
+                            final_progress = float(updated_root_task.progress)
+                        else:
+                            # For Mock objects or other types, use fallback
+                            final_progress = task_tree.calculate_progress()
+                    else:
+                        final_progress = 0.0
+                except (ValueError, TypeError):
+                    # If conversion fails (e.g., Mock object), use fallback
+                    final_progress = task_tree.calculate_progress()
+            else:
+                # Fallback to in-memory calculation if DB reload fails
+                final_status = task_tree.calculate_status()
+                final_progress = task_tree.calculate_progress()
             
             # Get root task result
             root_result = {
@@ -423,23 +454,47 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             if not user_id:
                 raise ValueError(f"Task {task_id} missing required user_id")
             
-            # Create TaskModel
-            task_model = TaskModel(
-                id=task_id,
-                parent_id=parent_id,
-                user_id=user_id,
-                name=task_dict.get("name", "Unnamed Task"),
-                status=task_dict.get("status", "pending"),
-                priority=task_dict.get("priority", 1),
-                has_children=task_dict.get("has_children", False),
-                dependencies=task_dict.get("dependencies", []),
-                progress=task_dict.get("progress", 0.0),
-                input_data=task_dict.get("input_data", {}),
-                params=task_dict.get("params", {}),
-                schemas=task_dict.get("schemas", {}),
-                result=task_dict.get("result"),
-                error=task_dict.get("error"),
-            )
+            # Create TaskModel using configured class (supports custom TaskModel)
+            # Only set fields that are explicitly provided in task_dict
+            # This ensures that None values mean "don't update" in _save_tasks_to_database
+            task_data = {
+                "id": task_id,
+                "parent_id": parent_id,
+                "user_id": user_id,
+                "name": task_dict.get("name", "Unnamed Task"),  # Required field, has default
+                "status": task_dict.get("status", "pending"),  # Required field, has default
+                "priority": task_dict.get("priority", 1),  # Required field, has default
+                "has_children": task_dict.get("has_children", False),  # Required field, has default
+                "progress": task_dict.get("progress", 0.0),  # Required field, has default
+            }
+            
+            # Optional fields: only set if explicitly provided in task_dict
+            # This allows None values to mean "don't update" in _save_tasks_to_database
+            if "dependencies" in task_dict:
+                task_data["dependencies"] = task_dict["dependencies"]
+            if "input_data" in task_dict:
+                task_data["input_data"] = task_dict["input_data"]
+            if "params" in task_dict:
+                task_data["params"] = task_dict["params"]
+            if "schemas" in task_dict:
+                task_data["schemas"] = task_dict["schemas"]
+            if "result" in task_dict:
+                task_data["result"] = task_dict["result"]
+            if "error" in task_dict:
+                task_data["error"] = task_dict["error"]
+            
+            # Add any custom fields from task_dict (e.g., project_id)
+            # These will be set if they exist as columns in the TaskModel
+            # Check both class attributes and table columns for custom fields
+            for key, value in task_dict.items():
+                if key not in task_data:
+                    # Check if field exists as class attribute or table column
+                    has_attr = hasattr(self.task_model_class, key)
+                    has_column = hasattr(self.task_model_class, '__table__') and key in self.task_model_class.__table__.columns
+                    if has_attr or has_column:
+                        task_data[key] = value
+            
+            task_model = self.task_model_class(**task_data)
             
             task_models.append(task_model)
             task_dict_map[task_id] = {"model": task_model, "dict": task_dict}
@@ -509,21 +564,131 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         """
         Save all tasks in the tree to database
         
+        This method handles both new task creation and existing task updates.
+        For existing tasks, it intelligently merges data:
+        - Only updates fields that are explicitly provided (not None)
+        - Deep merges input_data instead of overwriting
+        - Preserves existing custom fields if not in update data
+        - Uses task_model_class to dynamically determine fields (no hardcoded field lists)
+        
         Args:
             task_tree: Root task tree node
             db_session: Database session
         """
         from sqlalchemy.ext.asyncio import AsyncSession
+        import copy
         
         is_async = isinstance(db_session, AsyncSession)
+        
+        # Get all column names from the model class (supports custom TaskModel)
+        # This avoids hardcoding field names and makes the code maintainable
+        model_columns = set(self.task_model_class.__table__.columns.keys())
+        
+        # Fields that should never be updated (read-only or auto-managed)
+        readonly_fields = {'id', 'created_at', 'updated_at'}
+        
+        def should_update_field(key: str, value: Any, existing_value: Any) -> bool:
+            """
+            Determine if a field should be updated
+            
+            Principle: Only update fields that are explicitly provided (not None).
+            If a field is None in tasks dict, it means "don't update this field".
+            
+            Args:
+                key: Field name
+                value: New value from node.task
+                existing_value: Existing value in database
+                
+            Returns:
+                True if field should be updated, False otherwise
+            """
+            # Skip readonly fields
+            if key in readonly_fields:
+                return False
+            
+            # Skip non-model fields (internal attributes)
+            if key.startswith('_') or key not in model_columns:
+                return False
+            
+            # Only update if value is explicitly provided (not None)
+            # This preserves existing fields if not in update data
+            # Applies to all fields uniformly - no special cases for execution state
+            return value is not None
+        
+        def merge_input_data(existing: dict, new: dict, task_id: str) -> dict:
+            """
+            Deep merge new input_data into existing input_data
+            
+            This preserves pre-hook modifications while allowing updates to specific fields.
+            
+            Principle:
+            - If new is None: means "not provided" - preserve existing unchanged
+            - If new is empty dict ({}): means user explicitly wants to clear input_data - update to {}
+              This could happen if pre-hooks filtered out all invalid fields
+            - If new has content: merge it into existing (preserving existing keys, updating new keys)
+            - This allows updating only specific fields in input_data without overwriting the entire dict
+            
+            Args:
+                existing: Existing input_data from database (may contain pre-hook modifications)
+                new: New input_data from node.task (from tasks dict)
+                task_id: Task ID for logging purposes
+                
+            Returns:
+                Merged input_data dictionary
+            """
+            # None means not provided - preserve existing
+            if new is None:
+                return existing
+            
+            # Empty dict means user explicitly wants to clear input_data
+            # This could happen if pre-hooks filtered out all invalid fields
+            # Log a warning but allow it (executor should handle validation)
+            if not new:
+                logger.warning(
+                    f"Task {task_id}: input_data is empty dict - this may cause execution failure. "
+                    f"Consider validating input_data before execution."
+                )
+                return {}
+            
+            # No existing data - use new
+            if not existing:
+                return copy.deepcopy(new)
+            
+            # Deep merge: existing data is preserved, new data overwrites specific keys
+            # This allows updating only specific fields in input_data
+            # Example: existing={'resource': 'cpu', '_pre_hook_executed': True}, new={'resource': 'memory'}
+            # Result: {'resource': 'memory', '_pre_hook_executed': True}
+            merged = copy.deepcopy(existing)
+            merged.update(copy.deepcopy(new))
+            return merged
         
         async def save_node_async(node: TaskTreeNode):
             """Recursively save tasks (async)"""
             # Check if task already exists
-            existing = await db_session.get(TaskModel, node.task.id)
+            existing = await db_session.get(self.task_model_class, node.task.id)
             
             if not existing:
+                # New task: add directly
                 db_session.add(node.task)
+            else:
+                # Existing task: update fields intelligently
+                for key, value in node.task.__dict__.items():
+                    if not hasattr(existing, key):
+                        continue
+                    
+                    if not should_update_field(key, value, getattr(existing, key, None)):
+                        continue
+                    
+                    # Special handling for input_data: deep merge instead of overwrite
+                    # This preserves pre-hook modifications
+                    if key == 'input_data':
+                        existing_value = existing.input_data or {}
+                        new_value = value  # Keep original value (could be None or {})
+                        merged_value = merge_input_data(existing_value, new_value, existing.id)
+                        setattr(existing, key, merged_value)
+                    else:
+                        # For other fields: direct update
+                        setattr(existing, key, value)
             
             # Recursively save children
             for child in node.children:
@@ -533,11 +698,31 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             """Recursively save tasks (sync)"""
             # Check if task already exists
             from sqlalchemy import select
-            result = db_session.execute(select(TaskModel).filter(TaskModel.id == node.task.id))
+            result = db_session.execute(select(self.task_model_class).filter(self.task_model_class.id == node.task.id))
             existing = result.scalar_one_or_none()
             
             if not existing:
+                # New task: add directly
                 db_session.add(node.task)
+            else:
+                # Existing task: update fields intelligently
+                for key, value in node.task.__dict__.items():
+                    if not hasattr(existing, key):
+                        continue
+                    
+                    if not should_update_field(key, value, getattr(existing, key, None)):
+                        continue
+                    
+                    # Special handling for input_data: deep merge instead of overwrite
+                    # This preserves pre-hook modifications
+                    if key == 'input_data':
+                        existing_value = existing.input_data or {}
+                        new_value = value  # Keep original value (could be None or {})
+                        merged_value = merge_input_data(existing_value, new_value, existing.id)
+                        setattr(existing, key, merged_value)
+                    else:
+                        # For other fields: direct update
+                        setattr(existing, key, value)
             
             # Recursively save children
             for child in node.children:

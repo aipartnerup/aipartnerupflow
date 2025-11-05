@@ -9,9 +9,9 @@ This directory contains detailed documentation for the aipartnerupflow project.
 
 ### Architecture & Design
 - **[ARCHITECTURE.md](architecture/ARCHITECTURE.md)** - System architecture and design principles
-- **[FEATURES_ARCHITECTURE.md](architecture/FEATURES_ARCHITECTURE.md)** - Features architecture and executor pattern
 - **[DIRECTORY_STRUCTURE.md](architecture/DIRECTORY_STRUCTURE.md)** - Directory structure and naming conventions
-- **[NAMING_CONVENTION.md](architecture/NAMING_CONVENTION.md)** - Naming conventions for features, examples, and extensions
+- **[NAMING_CONVENTION.md](architecture/NAMING_CONVENTION.md)** - Naming conventions for extensions and examples
+- **[EXTENSION_REGISTRY_DESIGN.md](architecture/EXTENSION_REGISTRY_DESIGN.md)** - Extension registry design (Protocol-based architecture)
 
 ### Development
 - **[DEVELOPMENT.md](development/DEVELOPMENT.md)** - Development guide for contributors

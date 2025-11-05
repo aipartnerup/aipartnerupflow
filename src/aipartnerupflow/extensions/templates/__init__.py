@@ -7,8 +7,8 @@ to create task trees from predefined templates. This is an optional feature.
 Installation: pip install aipartnerupflow[templates]
 """
 
-from aipartnerupflow.features.templates.task_creator import TaskCreator
-from aipartnerupflow.features.templates.task_planner import TaskPlanner
+from aipartnerupflow.extensions.templates.task_creator import TaskCreator
+from aipartnerupflow.extensions.templates.task_planner import TaskPlanner
 
 __all__ = [
     "TaskCreator",

@@ -72,7 +72,9 @@ execution/          # Task orchestration specifications (CORE)
 └── streaming_callbacks.py  # Streaming support
 
 interfaces/        # Core interfaces
-├── plugin.py           # ExecutableTask interface, BaseTask base class
+├── executable_task.py  # ExecutableTask interface
+├── base/               # Base class implementations
+│   └── base_task.py   # BaseTask base class
 └── storage.py          # TaskStorage interface
 
 storage/           # Storage implementation
@@ -88,20 +90,7 @@ utils/             # Utility functions
 #### [crewai] - CrewAI LLM Task Support
 
 ```
-features/crewai/
-├── __init__.py
-├── crew_manager.py     # CrewManager - CrewAI wrapper
-└── types.py            # CrewManagerState
-```
-
-**Installation**: `pip install aipartnerupflow[crewai]`
-
-**Dependencies**: `crewai[tools]`, `crewai-tools`
-
-#### [crewai] - CrewAI LLM Task Support (includes BatchManager)
-
-```
-features/crewai/
+extensions/crewai/
 ├── __init__.py
 ├── crew_manager.py     # CrewManager - CrewAI wrapper
 ├── batch_manager.py    # BatchManager - batch execution of multiple crews
@@ -120,11 +109,13 @@ features/crewai/
 #### [templates] - Template-based Task Creation
 
 ```
-features/templates/
+extensions/templates/
 ├── __init__.py
 ├── task_planner.py      # TaskPlanner - template management
 └── task_creator.py      # TaskCreator - create tasks from templates
 ```
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
+grep
 
 **Installation**: `pip install aipartnerupflow[templates]`
 
@@ -143,7 +134,7 @@ features/templates/
 #### [http_executor] - HTTP/Remote API Task Execution (Future)
 
 ```
-features/http_executor/
+extensions/http_executor/
 ├── __init__.py
 ├── http_executor.py    # HTTPExecutor - ExecutableTask implementation for HTTP calls
 ├── client.py           # HTTP client with retry, timeout, auth support
@@ -269,7 +260,7 @@ pip install aipartnerupflow[all]
   - Task state management (pending, in_progress, completed, failed)
   - Task lifecycle management (create, execute, complete, failure handling)
 
-#### ExecutableTask (`interfaces/plugin.py`)
+#### ExecutableTask (`interfaces/executable_task.py`)
 - **Responsibility**: Define task execution specification interface
 - **Implementations**:
   - `CrewManager` [crewai]: LLM-based tasks (via CrewAI)
@@ -278,7 +269,7 @@ pip install aipartnerupflow[all]
 
 ### 2. Task Execution Layer
 
-#### CrewManager (`features/crewai/crew_manager.py`) [crewai]
+#### CrewManager (`extensions/crewai/crew_manager.py`) [crewai]
 - **Responsibility**: CrewAI (LLM) task execution - **ExecutableTask implementation**
 - **Features**:
   - Wraps CrewAI Crew functionality
@@ -286,7 +277,7 @@ pip install aipartnerupflow[all]
   - Implements ExecutableTask interface
 - **Type**: Task executor (one of many possible implementations)
 
-#### BatchManager (`features/crewai/batch_manager.py`) [crewai]
+#### BatchManager (`extensions/crewai/batch_manager.py`) [crewai]
 - **Responsibility**: Batch task orchestration for multiple crews (simple merging)
 - **Features**:
   - Atomic execution of multiple crews
@@ -294,7 +285,7 @@ pip install aipartnerupflow[all]
   - **Not an ExecutableTask** (it's a container, not a task)
 - **Location**: Part of [crewai] because it's specifically for batching CrewAI crews together
 
-#### HTTPExecutor (`features/http_executor/http_executor.py`) [http] (Future)
+#### HTTPExecutor (`extensions/http_executor/http_executor.py`) [http] (Future)
 - **Responsibility**: Remote HTTP/API call task execution - **ExecutableTask implementation**
 - **Features**:
   - HTTP/HTTPS request execution
@@ -314,7 +305,7 @@ pip install aipartnerupflow[all]
 - **CrewManager** [crewai]: LLM-based tasks via CrewAI
 - **HTTPExecutor** [http] (Future): Remote API calls via HTTP
 - **Future executors**: Shell executor, database executor, queue executor, etc.
-- **Location**: `features/` directory
+- **Location**: `extensions/` directory
 
 ### 3. Supporting Features
 
@@ -458,7 +449,7 @@ class ScheduledTask(ExecutableTask):
 6. **Optional Storage**: Provides persistence but configurable
 7. **Unified API**: Provides unified external interface using A2A Protocol (standard protocol)
 8. **Modular Installation**: Users install only what they need
-9. **Examples vs Production**: `ext/` for learning, `features/` for production use
+9. **Examples vs Extensions**: `examples/` for learning, `extensions/` for production use
 
 ## Comparison with aisee-core
 

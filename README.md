@@ -283,60 +283,14 @@ include additional FastAPI REST API endpoints for direct HTTP access without the
 
 ## Project Structure
 
-```
-aipartnerupflow/
-├── src/aipartnerupflow/
-│   ├── execution/      # Task orchestration specifications (CORE) [always included]
-│   │   ├── task_manager.py      # TaskManager - task orchestration core
-│   │   └── streaming_callbacks.py # Streaming support
-│   ├── base/           # Base interfaces and base classes [always included]
-│   │   ├── plugin.py   # ExecutableTask interface, BaseTask base class
-│   │   └── storage.py  # Storage interface
-│   ├── storage/        # Storage implementation [always included]
-│   │   ├── base.py     # TaskStorage interface
-│   │   ├── factory.py # create_storage() function
-│   │   ├── sqlalchemy/ # SQLAlchemy implementation
-│   │   └── dialects/   # Database dialects (DuckDB/PostgreSQL)
-│   ├── features/        # Optional features
-│   │   ├── crewai/     # CrewAI LLM support [crewai extra]
-│   │   │   ├── crew_manager.py
-│   │   │   ├── batch_manager.py  # Batch execution of multiple crews
-│   │   │   └── types.py
-│   │   └── templates/  # Template-based task creation [templates extra]
-│   │       ├── task_planner.py
-│   │       └── task_creator.py
-│   ├── examples/       # Predefined examples [examples extra]
-│   │   ├── crews/      # Example CrewManager implementations
-│   │   ├── batches/    # Example BatchManager implementations
-│   │   └── tasks/      # Example custom ExecutableTask implementations
-│   ├── api/            # Unified external API [api extra]
-│   │   ├── main.py     # API service entry point
-│   │   ├── a2a_server.py # A2A server creation
-│   │   ├── agent_executor.py # A2A protocol handling
-│   │   └── handlers/   # HTTP/SSE/WS handlers
-│   ├── cli/            # CLI tools [cli extra]
-│   │   ├── main.py     # CLI entry point
-│   │   └── commands/   # CLI commands
-│   │
-│   └── core/           # Core framework (always included)
-│       ├── interfaces/ # Core interfaces (ExecutableTask, BaseTask, TaskStorage)
-│       ├── execution/  # Task orchestration (TaskManager)
-│       ├── storage/    # Storage implementation
-│       └── utils/      # Utility functions
-│
-│   Note: Protocol specifications are handled by A2A Protocol (standard protocol).
-│   See api/ module for A2A Protocol implementation.
-└── tests/              # Test suite
-```
+For detailed directory structure, see [docs/architecture/DIRECTORY_STRUCTURE.md](docs/architecture/DIRECTORY_STRUCTURE.md).
 
-**Core Module Descriptions**:
-- **execution/**: Task orchestration specifications (core) - TaskManager handles task tree orchestration, dependency management, priority scheduling
-- **interfaces/**: Core interfaces - ExecutableTask, BaseTask, TaskStorage
-- **storage/**: Task state persistence - supports DuckDB (default) and PostgreSQL
-- **features/crewai/**: Optional CrewAI support - CrewManager and BatchManager [crewai]
-- **features/templates/**: Optional template-based task creation - TaskPlanner and TaskCreator [templates]
-- **examples/**: Predefined examples for learning and customization [examples]
-- **api/**: Unified external API interface - A2A Protocol Server [api]
+**Quick overview:**
+- `core/` - Core framework (task orchestration, interfaces, storage, utils)
+- `extensions/` - Framework extensions (crewai, stdio, templates)
+- `examples/` - Example implementations for learning
+- `api/` - A2A Protocol Server
+- `cli/` - CLI tools
 
 **Installation Strategy**:
 - `pip install aipartnerupflow`: Core library only (execution, base, storage, utils) - **NO CrewAI, NO templates**

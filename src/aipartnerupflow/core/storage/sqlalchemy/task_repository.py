@@ -158,8 +158,14 @@ class TaskRepository:
         try:
             if self.is_async:
                 task = await self.db.get(self.task_model_class, task_id)
+                if task:
+                    # Explicitly refresh to ensure we get the latest data from database
+                    await self.db.refresh(task)
             else:
                 task = self.db.get(self.task_model_class, task_id)
+                if task:
+                    # Explicitly refresh to ensure we get the latest data from database
+                    self.db.refresh(task)
             return task
         except Exception as e:
             logger.error(f"Error getting task by ID {task_id}: {str(e)}")
@@ -337,8 +343,16 @@ class TaskRepository:
             
             if self.is_async:
                 await self.db.commit()
+                await self.db.refresh(task)
             else:
                 self.db.commit()
+                self.db.refresh(task)
+            
+            # Verify the update was successful
+            logger.debug(
+                f"Updated input_data for task {task_id}: "
+                f"keys={list(input_data.keys())}, saved_keys={list(task.input_data.keys()) if task.input_data else []}"
+            )
             
             return True
             

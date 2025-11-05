@@ -10,7 +10,7 @@ No complex workflow - just batch execution with atomic semantics.
 """
 
 from typing import Dict, Any, Optional, Type
-from aipartnerupflow.features.crewai.types import BatchState
+from aipartnerupflow.extensions.crewai.types import BatchState
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -120,7 +120,7 @@ class BatchManager:
             logger.debug(f"Fresh inputs for {work_name}: {fresh_inputs}")
             
             # Import CrewManager here to avoid circular imports
-            from aipartnerupflow.features.crewai.crew_manager import CrewManager
+            from aipartnerupflow.extensions.crewai.crew_manager import CrewManager
             
             # Create crew manager instance
             _crew_manager = CrewManager(

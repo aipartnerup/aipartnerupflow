@@ -3,7 +3,7 @@ Example batch for demonstration purposes
 """
 
 from typing import Dict, Any
-from aipartnerupflow.features.crewai import BatchManager
+from aipartnerupflow.extensions.crewai import BatchManager
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)

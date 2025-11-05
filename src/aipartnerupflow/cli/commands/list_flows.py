@@ -19,7 +19,7 @@ def flows():
     """List all available flows"""
     try:
         # TODO: Implement actual batch/crew discovery
-        # This will scan examples/ and features/crewai/ for available implementations
+        # This will scan examples/ and extensions/crewai/ for available implementations
         batches = [
             {"id": "example_batch", "name": "Example Batch", "description": "An example batch"},
         ]

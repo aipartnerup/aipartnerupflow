@@ -10,7 +10,7 @@ Installation: pip install aipartnerupflow[templates]
 from typing import List, Dict, Any, Optional, Union
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from aipartnerupflow.features.templates.task_planner import (
+from aipartnerupflow.extensions.templates.task_planner import (
     TaskPlanner,
     TaskTemplate,
     TaskTemplateTreeNode
@@ -31,7 +31,7 @@ class TaskCreator:
     It combines TaskPlanner (template management) with TaskManager (task execution).
     
     Usage:
-        from aipartnerupflow.features.templates import TaskCreator
+        from aipartnerupflow.extensions.templates import TaskCreator
         
         creator = TaskCreator(db_session)
         task_tree = await creator.create_task_tree_from_template(

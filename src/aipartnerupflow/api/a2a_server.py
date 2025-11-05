@@ -3,7 +3,7 @@ A2A server implementation for aipartnerupflow
 """
 
 import httpx
-from typing import Optional, Type, List
+from typing import Optional
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import (
     InMemoryTaskStore,
@@ -18,7 +18,7 @@ from a2a.types import (
 from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
 from aipartnerupflow.api.custom_starlette_app import CustomA2AStarletteApplication
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
-from aipartnerupflow.core.types import TaskPreHook, TaskPostHook
+from aipartnerupflow.core.config import get_task_model_class
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -60,28 +60,14 @@ push_sender = BasePushNotificationSender(
     config_store=push_config_store
 )
 
-# Global task_model_class (can be set via create_a2a_server)
-_global_task_model_class: Optional[Type[TaskModel]] = None
-
-
-def _create_request_handler(
-    task_model_class: Optional[Type[TaskModel]] = None,
-    pre_hooks: Optional[List[TaskPreHook]] = None,
-    post_hooks: Optional[List[TaskPostHook]] = None
-):
+def _create_request_handler():
     """
     Create request handler with agent executor
     
-    Args:
-        task_model_class: Optional custom TaskModel class
-        pre_hooks: Optional list of pre-execution hook functions
-        post_hooks: Optional list of post-execution hook functions
+    Configuration (task_model_class, hooks) is automatically retrieved from
+    the global config registry by AIPartnerUpFlowAgentExecutor.
     """
-    agent_executor = AIPartnerUpFlowAgentExecutor(
-        task_model_class=task_model_class,
-        pre_hooks=pre_hooks,
-        post_hooks=post_hooks
-    )
+    agent_executor = AIPartnerUpFlowAgentExecutor()
     return DefaultRequestHandler(
         agent_executor=agent_executor,
         task_store=InMemoryTaskStore(),
@@ -123,15 +109,26 @@ def create_a2a_server(
     verify_token_algorithm: str = "HS256",
     base_url: Optional[str] = None,
     enable_system_routes: bool = True,
-    task_model_class: Optional[Type[TaskModel]] = None,
-    pre_hooks: Optional[List[TaskPreHook]] = None,
-    post_hooks: Optional[List[TaskPostHook]] = None,
 ) -> CustomA2AStarletteApplication:
     """
     Create A2A server instance with configuration
     
-    As a library: All configuration via function parameters (no env var dependency)
-    This avoids conflicts with user projects.
+    Configuration (hooks, task_model_class) should be registered using decorators
+    before calling this function. See the unified decorators module for details.
+    
+    Example:
+        from aipartnerupflow import register_pre_hook, register_post_hook, set_task_model_class
+        
+        @register_pre_hook
+        async def my_pre_hook(task):
+            task.input_data["url"] = task.input_data["url"].strip()
+        
+        @register_post_hook
+        async def my_post_hook(task, input_data, result):
+            logger.info(f"Task {task.id} completed")
+        
+        set_task_model_class(MyTaskModel)
+        create_a2a_server(...)
     
     Args:
         verify_token_func: Custom JWT token verification function.
@@ -145,39 +142,20 @@ def create_a2a_server(
                                Used only if verify_token_secret_key is provided and verify_token_func is None.
         base_url: Base URL of the service. Used in agent card.
         enable_system_routes: Whether to enable system routes like /system (default: True)
-        task_model_class: Optional custom TaskModel class.
-                         Users can pass their custom TaskModel subclass that inherits TaskModel
-                         to add custom fields (e.g., project_id, department, etc.).
-                         If None, default TaskModel will be used.
-                         Example: create_a2a_server(..., task_model_class=MyTaskModel)
-        pre_hooks: Optional list of pre-execution hook functions.
-                  Each hook receives (task: TaskModel) and can access/modify task.input_data.
-                  Hooks can be sync or async functions.
-                  Example:
-                      async def my_pre_hook(task):
-                          if task.input_data and task.input_data.get("url"):
-                              task.input_data["url"] = task.input_data["url"].strip()
-                      create_a2a_server(..., pre_hooks=[my_pre_hook])
-        post_hooks: Optional list of post-execution hook functions.
-                   Each hook receives (task: TaskModel, input_data: Dict[str, Any], result: Any).
-                   Hooks can be sync or async functions.
-                   Example:
-                       async def my_post_hook(task, input_data, result):
-                           logger.info(f"Task {task.id} completed with result: {result}")
-                       create_a2a_server(..., post_hooks=[my_post_hook])
     
     Returns:
         CustomA2AStarletteApplication instance
+    
+    Note:
+        To configure hooks and TaskModel, use the unified decorators:
+        - @register_pre_hook: Register pre-execution hooks
+        - @register_post_hook: Register post-execution hooks
+        - set_task_model_class(): Set custom TaskModel class
+        
+        All decorators are available from: from aipartnerupflow import ...
     """
-    global _global_task_model_class
-    _global_task_model_class = task_model_class
-
-    # Create request handler with custom TaskModel and hooks support
-    request_handler = _create_request_handler(
-        task_model_class=task_model_class,
-        pre_hooks=pre_hooks,
-        post_hooks=post_hooks
-    )
+    # Create request handler (reads from config registry)
+    request_handler = _create_request_handler()
 
     # Create agent card
     public_agent_card = AgentCard(
@@ -199,11 +177,14 @@ def create_a2a_server(
             return verify_token(token, verify_token_secret_key, verify_token_algorithm)
         verify_token_func = verify_token_func_callback
 
+    # Get task_model_class from registry (may have been set via set_task_model_class)
+    final_task_model_class = get_task_model_class()
+    
     return CustomA2AStarletteApplication(
         agent_card=public_agent_card,
         http_handler=request_handler,
         verify_token_func=verify_token_func,
         enable_system_routes=enable_system_routes,
-        task_model_class=task_model_class,
+        task_model_class=final_task_model_class,
     )
 

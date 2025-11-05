@@ -9,9 +9,9 @@ docs/
 ├── README.md                    # Documentation index
 ├── architecture/                # Architecture and design documents
 │   ├── ARCHITECTURE.md          # System architecture and design principles
-│   ├── FEATURES_ARCHITECTURE.md # Features architecture and executor pattern
 │   ├── DIRECTORY_STRUCTURE.md   # Directory structure and naming conventions
-│   └── NAMING_CONVENTION.md     # Naming conventions for features, examples, extensions
+│   ├── NAMING_CONVENTION.md     # Naming conventions for extensions and examples
+│   └── EXTENSION_REGISTRY_DESIGN.md  # Extension registry design (Protocol-based)
 ├── development/                 # Development guides
 │   ├── DEVELOPMENT.md          # Development guide for contributors
 │   └── CLI_DESIGN.md           # CLI design and implementation

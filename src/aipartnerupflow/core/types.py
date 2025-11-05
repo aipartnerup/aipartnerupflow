@@ -194,6 +194,5 @@ __all__ = [
     "TaskPreHook",
     "TaskPostHook",
     "TaskStatus",
-    "TaskPriority",
 ]
 

@@ -15,6 +15,24 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# Add src directory to path for imports
+src_path = os.path.join(project_root, "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+# Auto-discover built-in extensions for tests
+# This ensures extensions are registered before tests run
+# Must be imported before other modules that use the registry
+try:
+    from aipartnerupflow.extensions.stdio import StdioExecutor  # noqa: F401
+except ImportError:
+    pass  # Extension not available, tests will handle this
+
+try:
+    from aipartnerupflow.extensions.crewai import CrewManager  # noqa: F401
+except ImportError:
+    pass  # Extension not available, tests will handle this
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker

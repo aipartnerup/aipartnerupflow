@@ -8,12 +8,24 @@ The core framework provides task orchestration and execution specifications. All
 
 ```
 core/
-├── interfaces/     # Core interfaces
-│   ├── plugin.py   # ExecutableTask interface, BaseTask base class
-│   └── storage.py  # TaskStorage interface
+├── interfaces/     # Core interfaces (abstract contracts)
+│   └── executable_task.py  # ExecutableTask interface
+├── base/           # Base class implementations
+│   └── base_task.py  # BaseTask base class with common functionality
+├── types.py        # Core type definitions (TaskTreeNode, TaskStatus, hooks)
+├── decorators.py   # Unified decorators (Flask-style API)
+│                    # register_pre_hook, register_post_hook, extension_register
+├── config/         # Configuration registry
+│   └── registry.py  # ConfigRegistry for hooks and TaskModel
 ├── execution/      # Task orchestration specifications
 │   ├── task_manager.py      # TaskManager - core orchestration engine
 │   └── streaming_callbacks.py  # Streaming support
+├── extensions/     # Extension system
+│   ├── base.py     # Extension base class
+│   ├── decorators.py  # @extension_register decorator
+│   ├── registry.py   # ExtensionRegistry
+│   ├── protocol.py   # Protocol-based design (ExecutorLike, ExecutorFactory)
+│   └── types.py      # ExtensionCategory enum
 ├── storage/        # Storage implementation
 │   ├── factory.py  # create_storage() function
 │   ├── sqlalchemy/ # SQLAlchemy implementation
@@ -23,14 +35,14 @@ core/
     └── helpers.py  # Helper functions
 ```
 
-## Optional Features (`features/`)
+## Extensions (`extensions/`)
 
-Optional features require extra dependencies and are installed separately.
+Framework extensions are optional features that require extra dependencies and are installed separately.
 
 ### [crewai] - CrewAI LLM Task Support
 
 ```
-features/crewai/
+extensions/crewai/
 ├── __init__.py
 ├── crew_manager.py     # CrewManager - CrewAI wrapper
 ├── batch_manager.py    # BatchManager - batch execution of multiple crews
@@ -39,10 +51,20 @@ features/crewai/
 
 **Installation**: `pip install aipartnerupflow[crewai]`
 
+### [stdio] - Stdio Executor
+
+```
+extensions/stdio/
+├── __init__.py
+└── executor.py         # StdioExecutor - local command execution
+```
+
+**Installation**: Included in core (no extra required)
+
 ### [templates] - Template-based Task Creation
 
 ```
-features/templates/
+extensions/templates/
 ├── __init__.py
 ├── task_planner.py     # TaskPlanner - template management
 └── task_creator.py    # TaskCreator - create tasks from templates

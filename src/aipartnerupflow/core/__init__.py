@@ -2,27 +2,53 @@
 Core orchestration framework modules
 
 This module contains all core framework components for task orchestration:
-- interfaces/: Core interfaces (ExecutableTask, BaseTask, TaskStorage)
+- interfaces/: Core interfaces (ExecutableTask) - abstract contracts
+- base/: Base class implementations (BaseTask) - common functionality
 - execution/: Task orchestration (TaskManager, StreamingCallbacks)
 - storage/: Storage implementation (DuckDB default, PostgreSQL optional)
+- types.py: Core type definitions (TaskTreeNode, TaskStatus, hooks)
 - utils/: Utility functions
 
 All core modules are always included (pip install aipartnerupflow).
 No optional dependencies required.
 
-Note: TaskPlanner (template-based task creation) is now in features/templates/ [templates]
+Note: TaskPlanner (template-based task creation) is now in extensions/templates/ [templates]
 Note: Protocol specifications are handled by A2A Protocol (Agent-to-Agent Protocol),
 which is the standard protocol for agent communication. See api/ module for A2A implementation.
 """
 
 # Re-export from core modules for convenience
-from aipartnerupflow.core.interfaces import ExecutableTask, BaseTask
-from aipartnerupflow.core.execution import TaskManager, StreamingCallbacks
+from aipartnerupflow.core.interfaces import ExecutableTask
+from aipartnerupflow.core.base import BaseTask
+from aipartnerupflow.core.execution import (
+    TaskManager,
+    StreamingCallbacks,
+)
+from aipartnerupflow.core.extensions import (
+    Extension,
+    ExtensionCategory,
+    ExtensionRegistry,
+    get_registry,
+    register_extension,
+)
 from aipartnerupflow.core.types import (
     TaskTreeNode,
     TaskPreHook,
     TaskPostHook,
     TaskStatus,
+)
+# Unified decorators (convenience re-export from decorators module)
+from aipartnerupflow.core.decorators import (
+    register_pre_hook,
+    register_post_hook,
+    set_task_model_class,
+    get_task_model_class,
+    clear_config,
+    extension_register,
+)
+from aipartnerupflow.core.config import (
+    get_pre_hooks,
+    get_post_hooks,
 )
 from aipartnerupflow.core.storage import (
     create_session,
@@ -44,6 +70,22 @@ __all__ = [
     # Execution
     "TaskManager",
     "StreamingCallbacks",
+    # Extensions
+    "Extension",
+    "ExtensionCategory",
+    "ExtensionRegistry",
+    "get_registry",
+    "register_extension",
+    # Unified Decorators (Flask-style API)
+    "register_pre_hook",
+    "register_post_hook",
+    "set_task_model_class",
+    "get_task_model_class",
+    "clear_config",
+    "extension_register",
+    # Configuration Registry (internal)
+    "get_pre_hooks",
+    "get_post_hooks",
     # Storage
     "create_session",
     "get_default_session",

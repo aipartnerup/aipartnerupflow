@@ -10,12 +10,14 @@ import subprocess
 import platform
 import json
 from typing import Dict, Any, Optional
-from aipartnerupflow.core.interfaces.plugin import BaseTask
+from aipartnerupflow.core.base import BaseTask
+from aipartnerupflow.core.extensions.decorators import extension_register
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
+@extension_register()
 class StdioExecutor(BaseTask):
     """
     Executes processes via stdio communication (inspired by MCP stdio mode)
@@ -47,6 +49,11 @@ class StdioExecutor(BaseTask):
         "Get system information",
         "Run Python script"
     ]
+    
+    @property
+    def type(self) -> str:
+        """Extension type identifier for categorization"""
+        return "stdio"
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """

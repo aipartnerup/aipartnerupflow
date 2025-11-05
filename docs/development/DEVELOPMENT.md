@@ -12,8 +12,9 @@ aipartnerupflow/
 │   │   ├── execution/       # Task orchestration (TaskManager) - CORE
 │   │   ├── storage/         # Storage implementation - CORE
 │   │   └── utils/           # Utility functions - CORE
-│   ├── features/            # Optional features
+│   ├── extensions/          # Framework extensions
 │   │   ├── crewai/          # CrewAI support [crewai]
+│   │   ├── stdio/           # Stdio executor (local commands)
 │   │   └── templates/       # Template-based task creation [templates]
 │   ├── examples/            # Examples [examples]
 │   ├── api/                 # API service layer [api]
@@ -430,13 +431,13 @@ xdg-open htmlcov/index.html  # Linux
 
 **Core Modules** (always included with `pip install aipartnerupflow`):
 - **`execution/`**: Task orchestration specifications (TaskManager, StreamingCallbacks)
-- **`features/templates/`**: Template-based task creation (TaskPlanner, TaskCreator) [templates]
+- **`extensions/templates/`**: Template-based task creation (TaskPlanner, TaskCreator) [templates]
 - **`interfaces/`**: Core interfaces (ExecutableTask, BaseTask, TaskStorage)
 - **`storage/`**: Storage abstractions and implementations (DuckDB default, PostgreSQL optional)
 - **`utils/`**: Utility functions
 
-**Optional Feature Modules**:
-- **`features/crewai/`**: CrewAI LLM task support [crewai extra]
+**Optional Extension Modules**:
+- **`extensions/crewai/`**: CrewAI LLM task support [crewai extra]
   - `crew_manager.py`: CrewManager for LLM-based agent crews
   - `batch_manager.py`: BatchManager for atomic batch execution of multiple crews
   - `types.py`: CrewManagerState, BatchState
