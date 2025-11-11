@@ -14,7 +14,8 @@ from aipartnerupflow.extensions.stdio import StdioExecutor
 class TestStdioSecurity:
     """Test security features of StdioExecutor"""
 
-    def test_command_disabled_by_default(self):
+    @pytest.mark.asyncio
+    async def test_command_disabled_by_default(self):
         """Test that command execution is disabled by default"""
         executor = StdioExecutor()
         
@@ -28,7 +29,7 @@ class TestStdioSecurity:
             # Create a new executor instance
             executor = stdio_module.StdioExecutor()
             
-            result = executor.execute({
+            result = await executor.execute({
                 "method": "command",
                 "command": "echo test"
             })
@@ -38,12 +39,13 @@ class TestStdioSecurity:
             assert result["security_blocked"] is True
             assert "disabled by default" in result["error"].lower()
 
-    def test_system_info_always_available(self):
+    @pytest.mark.asyncio
+    async def test_system_info_always_available(self):
         """Test that system_info method is always available (safe commands)"""
         executor = StdioExecutor()
         
         # system_info should work even when command is disabled
-        result = executor.execute({
+        result = await executor.execute({
             "method": "system_info",
             "resource": "cpu"
         })
@@ -56,11 +58,12 @@ class TestStdioSecurity:
         os.getenv("AIPARTNERUPFLOW_STDIO_ALLOW_COMMAND") != "1",
         reason="Command execution not enabled in test environment"
     )
-    def test_command_enabled_with_env_var(self):
+    @pytest.mark.asyncio
+    async def test_command_enabled_with_env_var(self):
         """Test that command execution works when explicitly enabled"""
         executor = StdioExecutor()
         
-        result = executor.execute({
+        result = await executor.execute({
             "method": "command",
             "command": "echo test"
         })

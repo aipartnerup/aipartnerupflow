@@ -53,12 +53,25 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         """
         # Initialize task executor which manages task execution and tracking
         self.task_executor = TaskExecutor()
+        # Refresh config to ensure we pick up hooks registered via decorators
+        # (important for tests where hooks may be registered after TaskExecutor singleton initialization)
+        self.task_executor.refresh_config()
         self.task_model_class = get_task_model_class()
         
         logger.info(
             f"Initialized AIPartnerUpFlowAgentExecutor "
             f"(TaskModel: {self.task_model_class.__name__})"
         )
+    
+    @property
+    def pre_hooks(self):
+        """Get pre-hooks from task executor"""
+        return self.task_executor.pre_hooks
+    
+    @property
+    def post_hooks(self):
+        """Get post-hooks from task executor"""
+        return self.task_executor.post_hooks
 
     async def execute(
         self,
