@@ -19,6 +19,7 @@ from a2a.utils.constants import (
 from aipartnerupflow.core.storage import get_default_session
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from aipartnerupflow.core.execution.task_creator import TaskCreator
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -126,7 +127,8 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
     def __init__(
         self, 
         *args, 
-        verify_token_func: Optional[Callable[[str], Optional[dict]]] = None, 
+        verify_token_func: Optional[Callable[[str], Optional[dict]]] = None,
+        verify_permission_func: Optional[Callable[[str, Optional[str], Optional[list]], bool]] = None,
         enable_system_routes: bool = True,
         task_model_class: Optional[Type[TaskModel]] = None,
         **kwargs
@@ -145,6 +147,13 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             verify_token_func: Function to verify JWT tokens.
                              If None, JWT auth will be disabled.
                              Signature: verify_token_func(token: str) -> Optional[dict]
+            verify_permission_func: Function to verify user permissions.
+                                  If None, permission checking is disabled.
+                                  Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
+                                  Returns True if user has permission to access target_user_id's resources.
+                                  - If user is admin (roles contains "admin"), can access any user_id
+                                  - If user is not admin, can only access their own user_id
+                                  - If target_user_id is None, permission is granted (no specific user restriction)
             enable_system_routes: Whether to enable system routes like /system (default: True)
             task_model_class: Optional custom TaskModel class.
                              Users can pass their custom TaskModel subclass that inherits TaskModel
@@ -160,12 +169,17 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         # Handle verify_token_func
         self.verify_token_func = verify_token_func
         
+        # Handle verify_permission_func
+        self.verify_permission_func = verify_permission_func
+        
         # Store task_model_class for task management APIs
         self.task_model_class = task_model_class or TaskModel
         
         logger.info(
             f"Initialized CustomA2AStarletteApplication "
             f"(System routes: {self.enable_system_routes}, "
+            f"JWT auth: {self.verify_token_func is not None}, "
+            f"Permission check: {self.verify_permission_func is not None}, "
             f"TaskModel: {self.task_model_class.__name__})"
         )
     
@@ -227,43 +241,55 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             method = body.get("method")
             params = body.get("params", {})
             
-            logger.info(f"🔍 [handle_task_requests] [{request_id}] Method: {method}, Params: {params}")
-            
-            # Route to specific handler based on method
-            # Task CRUD operations
-            if method == "tasks.create":
-                result = await self._handle_task_create_logic(params, request_id)
-            elif method == "tasks.get":
-                result = await self._handle_task_get_logic(params, request_id)
-            elif method == "tasks.update":
-                result = await self._handle_task_update_logic(params, request_id)
-            elif method == "tasks.delete":
-                result = await self._handle_task_delete_logic(params, request_id)
-            # Task query operations
-            elif method == "tasks.detail":
-                result = await self._handle_task_detail_logic(params, request_id)
-            elif method == "tasks.tree":
-                result = await self._handle_task_tree_logic(params, request_id)
-            # Running task monitoring
-            elif method == "tasks.running.list":
-                result = await self._handle_running_tasks_list_logic(params, request_id)
-            elif method == "tasks.running.status":
-                result = await self._handle_running_tasks_status_logic(params, request_id)
-            elif method == "tasks.running.count":
-                result = await self._handle_running_tasks_count_logic(params, request_id)
+            # Support direct tasks array for tasks.create method
+            # If method is tasks.create and params is a list, use it directly
+            if method == "tasks.create" and isinstance(params, list):
+                # params is directly the tasks array
+                logger.info(f"🔍 [handle_task_requests] [{request_id}] Method: {method}, Tasks array: {len(params)} tasks")
+                result = await self._handle_task_create_logic(params, request, request_id)
             else:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "jsonrpc": "2.0",
-                        "id": body.get("id", request_id),
-                        "error": {
-                            "code": -32601,
-                            "message": "Method not found",
-                            "data": f"Unknown task method: {method}"
+                # Normal case: params is a dict
+                if not isinstance(params, dict):
+                    params = {}  # Fallback to empty dict if params is not dict or list
+                
+                logger.info(f"🔍 [handle_task_requests] [{request_id}] Method: {method}, Params: {params}")
+                
+                # Route to specific handler based on method
+                # Pass request object to handlers for access to user info and permission checking
+                # Task CRUD operations
+                if method == "tasks.create":
+                    result = await self._handle_task_create_logic(params, request, request_id)
+                elif method == "tasks.get":
+                    result = await self._handle_task_get_logic(params, request, request_id)
+                elif method == "tasks.update":
+                    result = await self._handle_task_update_logic(params, request, request_id)
+                elif method == "tasks.delete":
+                    result = await self._handle_task_delete_logic(params, request, request_id)
+                # Task query operations
+                elif method == "tasks.detail":
+                    result = await self._handle_task_detail_logic(params, request, request_id)
+                elif method == "tasks.tree":
+                    result = await self._handle_task_tree_logic(params, request, request_id)
+                # Running task monitoring
+                elif method == "tasks.running.list":
+                    result = await self._handle_running_tasks_list_logic(params, request, request_id)
+                elif method == "tasks.running.status":
+                    result = await self._handle_running_tasks_status_logic(params, request, request_id)
+                elif method == "tasks.running.count":
+                    result = await self._handle_running_tasks_count_logic(params, request, request_id)
+                else:
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "jsonrpc": "2.0",
+                            "id": body.get("id", request_id),
+                            "error": {
+                                "code": -32601,
+                                "message": "Method not found",
+                                "data": f"Unknown task method: {method}"
+                            }
                         }
-                    }
-                )
+                    )
             
             end_time = time.time()
             duration = end_time - start_time
@@ -350,7 +376,12 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                 }
             )
 
-    async def _handle_task_detail_logic(self, params: dict, request_id: str) -> Optional[dict]:
+    async def _handle_task_detail_logic(
+        self, 
+        params: dict, 
+        request: Request, 
+        request_id: str
+    ) -> Optional[dict]:
         """
         Handle task detail query - returns full task information including all fields
         
@@ -374,13 +405,21 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             if not task:
                 return None
             
+            # Check permission to access this task
+            self._check_permission(request, task.user_id, "access")
+            
             return task.to_dict()
             
         except Exception as e:
             logger.error(f"Error getting task detail: {str(e)}", exc_info=True)
             raise
 
-    async def _handle_task_tree_logic(self, params: dict, request_id: str) -> Optional[dict]:
+    async def _handle_task_tree_logic(
+        self, 
+        params: dict, 
+        request: Request, 
+        request_id: str
+    ) -> Optional[dict]:
         """
         Handle task tree query - returns task tree structure
         
@@ -405,6 +444,9 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             if not task:
                 raise ValueError(f"Task {task_id} not found")
             
+            # Check permission to access this task
+            self._check_permission(request, task.user_id, "access")
+            
             # If task has parent, find root first
             root_task = await task_repository.get_root_task(task)
             
@@ -425,12 +467,17 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             logger.error(f"Error getting task tree: {str(e)}", exc_info=True)
             raise
 
-    async def _handle_running_tasks_list_logic(self, params: dict, request_id: str) -> list:
+    async def _handle_running_tasks_list_logic(
+        self, 
+        params: dict, 
+        request: Request, 
+        request_id: str
+    ) -> list:
         """
         Handle running tasks list - returns list of currently running tasks
         
         Params:
-            user_id: Optional user ID filter
+            user_id: Optional user ID filter (will be checked for permission)
             status: Optional status filter (default: "in_progress")
             limit: Optional limit (default: 100)
         
@@ -441,6 +488,16 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             user_id = params.get("user_id")
             status_filter = params.get("status", "in_progress")
             limit = params.get("limit", 100)
+            
+            # Check permission if user_id is specified
+            if user_id:
+                self._check_permission(request, user_id, "list tasks for")
+            else:
+                # No user_id specified, use authenticated user_id or None
+                authenticated_user_id, _ = self._get_user_info(request)
+                if authenticated_user_id:
+                    user_id = authenticated_user_id
+                # If no JWT and no user_id, user_id remains None (list all tasks)
             
             # Get database session and create repository
             db_session = get_default_session()
@@ -471,7 +528,12 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             logger.error(f"Error getting running tasks list: {str(e)}", exc_info=True)
             raise
 
-    async def _handle_running_tasks_status_logic(self, params: dict, request_id: str) -> list:
+    async def _handle_running_tasks_status_logic(
+        self, 
+        params: dict, 
+        request: Request, 
+        request_id: str
+    ) -> list:
         """
         Handle running tasks status - returns status of multiple running tasks
         
@@ -498,15 +560,30 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             for task_id in task_ids:
                 task = await task_repository.get_task_by_id(task_id.strip())
                 if task:
-                    statuses.append({
-                        "task_id": task.id,
-                        "context_id": task.id,  # For A2A Protocol compatibility
-                        "status": task.status,
-                        "progress": float(task.progress) if task.progress else 0.0,
-                        "error": task.error,
-                        "started_at": task.started_at.isoformat() if task.started_at else None,
-                        "updated_at": task.updated_at.isoformat() if task.updated_at else None,
-                    })
+                    # Check permission to access this task
+                    try:
+                        self._check_permission(request, task.user_id, "access")
+                        statuses.append({
+                            "task_id": task.id,
+                            "context_id": task.id,  # For A2A Protocol compatibility
+                            "status": task.status,
+                            "progress": float(task.progress) if task.progress else 0.0,
+                            "error": task.error,
+                            "started_at": task.started_at.isoformat() if task.started_at else None,
+                            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+                        })
+                    except ValueError as e:
+                        # Permission denied, skip this task
+                        logger.warning(f"Permission denied for task {task_id}: {e}")
+                        statuses.append({
+                            "task_id": task_id,
+                            "context_id": task_id,
+                            "status": "permission_denied",
+                            "progress": 0.0,
+                            "error": str(e),
+                            "started_at": None,
+                            "updated_at": None,
+                        })
                 else:
                     statuses.append({
                         "task_id": task_id,
@@ -524,12 +601,17 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             logger.error(f"Error getting running tasks status: {str(e)}", exc_info=True)
             raise
 
-    async def _handle_running_tasks_count_logic(self, params: dict, request_id: str) -> dict:
+    async def _handle_running_tasks_count_logic(
+        self, 
+        params: dict, 
+        request: Request, 
+        request_id: str
+    ) -> dict:
         """
         Handle running tasks count - returns count of tasks by status
         
         Params:
-            user_id: Optional user ID filter
+            user_id: Optional user ID filter (will be checked for permission)
             status: Optional status filter (if not provided, returns counts for all statuses)
         
         Returns:
@@ -538,6 +620,16 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         try:
             user_id = params.get("user_id")
             status_filter = params.get("status")
+            
+            # Check permission if user_id is specified
+            if user_id:
+                self._check_permission(request, user_id, "count tasks for")
+            else:
+                # No user_id specified, use authenticated user_id or None
+                authenticated_user_id, _ = self._get_user_info(request)
+                if authenticated_user_id:
+                    user_id = authenticated_user_id
+                # If no JWT and no user_id, user_id remains None (count all tasks)
             
             # Get database session and create repository
             db_session = get_default_session()
@@ -594,58 +686,243 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             "running_tasks_count": 0,  # TODO: Implement actual task count
         }
 
-    async def _handle_task_create_logic(self, params: dict, request_id: str) -> dict:
-        """Handle task creation"""
+    def _get_user_info(self, request: Request) -> tuple[Optional[str], Optional[list]]:
+        """
+        Extract user information from request state (set by JWT middleware)
+        
+        Returns:
+            Tuple of (user_id, roles):
+            - user_id: User ID from JWT token payload (sub field)
+            - roles: User roles from JWT token payload (roles field, optional)
+        """
+        user_id = getattr(request.state, "user_id", None)
+        token_payload = getattr(request.state, "token_payload", None)
+        roles = None
+        if token_payload:
+            roles = token_payload.get("roles") or token_payload.get("role")
+            if roles and not isinstance(roles, list):
+                roles = [roles]
+        return user_id, roles
+
+    def _check_permission(
+        self, 
+        request: Request, 
+        target_user_id: Optional[str],
+        operation: str = "access"
+    ) -> Optional[str]:
+        """
+        Check if user has permission to access target_user_id's resources
+        
+        Permission rules:
+        1. If JWT is not enabled (no verify_token_func) and target_user_id is None:
+           - Return None (no user restriction, allow all)
+        2. If JWT is not enabled but target_user_id is provided:
+           - Return None (no user restriction, allow all)
+        3. If JWT is enabled:
+           - Get authenticated user_id from request.state (set by JWT middleware)
+           - If no authenticated user_id, raise error (JWT required)
+           - If target_user_id is None, return authenticated_user_id (user can access their own)
+           - If verify_permission_func is provided, use it to check permission
+           - If verify_permission_func is not provided, use default logic:
+             * Admin users (roles contains "admin") can access any user_id
+             * Non-admin users can only access their own user_id
+        
+        Args:
+            request: Request object with user info in state
+            target_user_id: Target user ID to check permission for (None means no specific user restriction)
+            operation: Operation name for logging (default: "access")
+        
+        Returns:
+            Resolved user_id to use:
+            - If JWT disabled: None (no user restriction)
+            - If JWT enabled: authenticated_user_id (validated)
+        
+        Raises:
+            ValueError: If permission is denied
+        """
+        # If JWT is not enabled, no permission checking needed
+        if not self.verify_token_func:
+            # No JWT, no user restriction - return None
+            return None
+        
+        # Get user info from request state (set by JWT middleware)
+        authenticated_user_id, roles = self._get_user_info(request)
+        
+        # If JWT is enabled but no authenticated user (JWT not provided or invalid)
+        if not authenticated_user_id:
+            # JWT is enabled but no valid token - this should not happen if middleware is working
+            # But if it does, we allow it (middleware should have rejected it)
+            logger.warning("JWT enabled but no authenticated user_id in request.state")
+            return None
+        
+        # If target_user_id is None, permission is granted (no specific user restriction)
+        # User can access their own resources (authenticated_user_id)
+        if target_user_id is None:
+            return authenticated_user_id
+        
+        # Check permission using verify_permission_func if provided
+        if self.verify_permission_func:
+            has_permission = self.verify_permission_func(
+                authenticated_user_id, 
+                target_user_id, 
+                roles
+            )
+            if not has_permission:
+                raise ValueError(
+                    f"Permission denied: User {authenticated_user_id} does not have permission "
+                    f"to {operation} resources for user {target_user_id}"
+                )
+            return authenticated_user_id
+        
+        # Default permission logic: admin can access any user_id, others can only access their own
+        is_admin = roles and "admin" in roles
+        if is_admin:
+            # Admin can access any user_id
+            logger.debug(f"Admin user {authenticated_user_id} accessing user {target_user_id}'s resources")
+            return authenticated_user_id
+        elif authenticated_user_id == target_user_id:
+            # User can access their own resources
+            return authenticated_user_id
+        else:
+            # User cannot access other users' resources
+            raise ValueError(
+                f"Permission denied: User {authenticated_user_id} can only {operation} their own resources, "
+                f"not user {target_user_id}'s resources"
+            )
+
+    async def _handle_task_create_logic(
+        self, 
+        params: dict | list, 
+        request: Request, 
+        request_id: str
+    ) -> dict:
+        """
+        Handle task creation
+        
+        Unified processing: convert all inputs to tasks array format
+        
+        Params can be:
+        1. List of task objects: [{"name": "Task 1", ...}, ...]
+        2. Single task dict: {"name": "Task 1", ...} - will be converted to [{"name": "Task 1", ...}]
+        
+        All tasks in the array must have the same user_id (after resolution).
+        If tasks have different user_ids, an error will be raised.
+        
+        Params format:
+            - If list: directly the tasks array
+            - If dict: single task object (will be converted to array)
+        
+        Each task object can have:
+            - id: Task ID (optional) - if provided, ALL tasks must have id and use id for references
+            - name: Task name (required)
+            - user_id: User ID (optional, will be checked/validated, must be same for all tasks)
+            - parent_id: Parent task ID or name (optional)
+            - priority: Priority level (optional, default: 1)
+            - dependencies: Dependencies list (optional)
+            - input_data: Input data (optional)
+            - schemas: Task schemas (optional)
+            - params: Task parameters (optional)
+            - ... (any custom fields)
+        """
         try:
-            # Get required parameters
-            name = params.get("name")
-            user_id = params.get("user_id")
+            # Convert params to tasks array format
+            if isinstance(params, dict):
+                # Single task - convert to array
+                tasks_array = [params]
+                logger.info(f"Creating task tree from single task (converted to array)")
+            elif isinstance(params, list):
+                # Already an array
+                tasks_array = params
+                logger.info(f"Creating task tree from {len(tasks_array)} tasks")
+            else:
+                raise ValueError("Params must be a dict (single task) or list (tasks array)")
             
-            if not name:
-                raise ValueError("Task name is required")
-            if not user_id:
-                raise ValueError("User ID is required")
+            if not tasks_array:
+                raise ValueError("Tasks array cannot be empty")
             
-            # Get optional parameters
-            parent_id = params.get("parent_id")
-            priority = params.get("priority", 1)
-            dependencies = params.get("dependencies")
-            input_data = params.get("input_data")
-            schemas = params.get("schemas")
-            params_dict = params.get("params")
+            # Get authenticated user_id if JWT is enabled
+            authenticated_user_id = None
+            if self.verify_token_func:
+                authenticated_user_id, _ = self._get_user_info(request)
             
-            # Extract custom fields (any fields not in core task fields)
-            core_fields = {
-                "name", "user_id", "parent_id", "priority", "dependencies",
-                "input_data", "schemas", "params", "method"
-            }
-            custom_fields = {k: v for k, v in params.items() if k not in core_fields}
+            # Collect all user_ids from tasks array
+            task_user_ids = set()
+            for task_data in tasks_array:
+                task_user_id = task_data.get("user_id")
+                if task_user_id:
+                    task_user_ids.add(task_user_id)
             
-            # Get database session and create repository with custom TaskModel
+            # Resolve and validate user_id for all tasks
+            resolved_user_id = None
+            
+            if task_user_ids:
+                # Tasks have user_id specified - all must be the same
+                if len(task_user_ids) > 1:
+                    raise ValueError(
+                        f"All tasks must have the same user_id. Found multiple user_ids: {task_user_ids}"
+                    )
+                
+                # Get the single user_id
+                specified_user_id = task_user_ids.pop()
+                
+                # Check permission
+                resolved_user_id = self._check_permission(request, specified_user_id, "create tasks for")
+                if resolved_user_id:
+                    # Use resolved user_id (may be authenticated_user_id for admin case)
+                    resolved_user_id = resolved_user_id
+                else:
+                    # No JWT, use specified user_id
+                    resolved_user_id = specified_user_id
+                
+                # Ensure all tasks use the same resolved user_id
+                for task_data in tasks_array:
+                    if task_data.get("user_id"):
+                        task_data["user_id"] = resolved_user_id
+            else:
+                # No user_id in tasks - use authenticated user_id or None
+                if authenticated_user_id:
+                    resolved_user_id = authenticated_user_id
+                    # Set user_id for all tasks
+                    for task_data in tasks_array:
+                        if "user_id" not in task_data:
+                            task_data["user_id"] = resolved_user_id
+                else:
+                    # No JWT and no user_id in tasks, allow None (no user restriction)
+                    resolved_user_id = None
+            
+            # Get database session and create TaskCreator
             db_session = get_default_session()
-            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            task_creator = TaskCreator(db_session)
             
-            # Create task (custom fields passed via **kwargs)
-            task = await task_repository.create_task(
-                name=name,
-                user_id=user_id,
-                parent_id=parent_id,
-                priority=priority,
-                dependencies=dependencies,
-                input_data=input_data,
-                schemas=schemas,
-                params=params_dict,
-                **custom_fields  # Pass custom fields
+            # Create task tree from array
+            task_tree = await task_creator.create_task_tree_from_array(
+                tasks=tasks_array,
             )
             
-            logger.info(f"Created task {task.id} (name: {name}, user_id: {user_id})")
-            return task.to_dict()
+            # Convert task tree to dictionary format for response
+            def tree_node_to_dict(node):
+                """Convert TaskTreeNode to dictionary"""
+                task_dict = node.task.to_dict()
+                if node.children:
+                    task_dict["children"] = [tree_node_to_dict(child) for child in node.children]
+                return task_dict
+            
+            result = tree_node_to_dict(task_tree)
+            
+            logger.info(f"Created task tree: root task {task_tree.task.name} "
+                       f"with {len(task_tree.children)} direct children")
+            return result
             
         except Exception as e:
             logger.error(f"Error creating task: {str(e)}", exc_info=True)
             raise
 
-    async def _handle_task_get_logic(self, params: dict, request_id: str) -> Optional[dict]:
+    async def _handle_task_get_logic(
+        self, 
+        params: dict, 
+        request: Request, 
+        request_id: str
+    ) -> Optional[dict]:
         """Handle task retrieval by ID"""
         try:
             task_id = params.get("task_id")
@@ -661,13 +938,21 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             if not task:
                 return None
             
+            # Check permission to access this task
+            self._check_permission(request, task.user_id, "access")
+            
             return task.to_dict()
             
         except Exception as e:
             logger.error(f"Error getting task: {str(e)}", exc_info=True)
             raise
 
-    async def _handle_task_update_logic(self, params: dict, request_id: str) -> dict:
+    async def _handle_task_update_logic(
+        self, 
+        params: dict, 
+        request: Request, 
+        request_id: str
+    ) -> dict:
         """Handle task update"""
         try:
             task_id = params.get("task_id")
@@ -682,6 +967,9 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             task = await task_repository.get_task_by_id(task_id)
             if not task:
                 raise ValueError(f"Task {task_id} not found")
+            
+            # Check permission to update this task
+            self._check_permission(request, task.user_id, "update")
             
             # Update status if provided
             status = params.get("status")
@@ -713,7 +1001,12 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             logger.error(f"Error updating task: {str(e)}", exc_info=True)
             raise
 
-    async def _handle_task_delete_logic(self, params: dict, request_id: str) -> dict:
+    async def _handle_task_delete_logic(
+        self, 
+        params: dict, 
+        request: Request, 
+        request_id: str
+    ) -> dict:
         """Handle task deletion"""
         try:
             task_id = params.get("task_id")
@@ -728,6 +1021,9 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             task = await task_repository.get_task_by_id(task_id)
             if not task:
                 raise ValueError(f"Task {task_id} not found")
+            
+            # Check permission to delete this task
+            self._check_permission(request, task.user_id, "delete")
             
             # Delete task
             # Note: TaskRepository doesn't have delete method yet, so we'll mark as deleted or remove

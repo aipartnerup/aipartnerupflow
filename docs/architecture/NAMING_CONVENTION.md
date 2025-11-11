@@ -15,14 +15,13 @@ This document clarifies the distinction between `extensions/` and `examples/` di
 - ✅ Full test coverage
 - ✅ Maintained by framework maintainers
 - ✅ Can have heavy dependencies
-- ✅ Installed via extras: `[crewai]`, `[stdio]`, `[templates]`
+- ✅ Installed via extras: `[crewai]`, `[stdio]`
 - ✅ Direct use in production
 - ✅ Registered through `ExtensionRegistry` system
 
 **Examples**:
 - `extensions/crewai/` - CrewAI executor (LLM tasks)
 - `extensions/stdio/` - Stdio executor (local command execution)
-- `extensions/templates/` - Template-based task creation
 
 **Location**: `src/aipartnerupflow/extensions/`
 

@@ -70,7 +70,7 @@ class TaskRepository:
     async def create_task(
         self,
         name: str,
-        user_id: str,
+        user_id: Optional[str] = None,
         parent_id: Optional[str] = None,
         priority: int = 1,
         dependencies: Optional[List[Dict[str, Any]]] = None,
@@ -84,7 +84,7 @@ class TaskRepository:
         
         Args:
             name: Task name
-            user_id: User ID
+            user_id: User ID (optional, for multi-user scenarios)
             parent_id: Parent task ID
             priority: Priority level (0=urgent/highest, 1=high, 2=normal, 3=low/lowest). ASC order: smaller numbers execute first.
             dependencies: Task dependencies: [{"id": "uuid", "required": true}]

@@ -19,7 +19,7 @@ This document described the implementation plan for migrating from the initial c
 The current architecture matches the design described in [ARCHITECTURE.md](../architecture/ARCHITECTURE.md):
 
 - **Core**: `core/` - Pure orchestration framework
-- **Extensions**: `extensions/` - Framework extensions (crewai, stdio, templates)
+- **Extensions**: `extensions/` - Framework extensions (crewai, stdio)
 - **Examples**: `examples/` - Learning templates
 - **API**: `api/` - A2A Protocol Server
 - **CLI**: `cli/` - CLI tools

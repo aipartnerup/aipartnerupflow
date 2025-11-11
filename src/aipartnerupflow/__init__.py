@@ -7,7 +7,6 @@ Core modules (always included):
 - core.interfaces: Core interfaces (ExecutableTask, BaseTask)
 - core.execution: Task orchestration (TaskManager, StreamingCallbacks)
 - core.extensions: Unified extension system (ExtensionRegistry, ExtensionCategory)
-- extensions.templates: Template-based task creation (TaskPlanner, TaskCreator) [templates]
 - core.storage: Database session factory (DuckDB default, PostgreSQL optional)
 - core.utils: Utility functions
 

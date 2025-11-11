@@ -61,17 +61,6 @@ extensions/stdio/
 
 **Installation**: Included in core (no extra required)
 
-### [templates] - Template-based Task Creation
-
-```
-extensions/templates/
-├── __init__.py
-├── task_planner.py     # TaskPlanner - template management
-└── task_creator.py    # TaskCreator - create tasks from templates
-```
-
-**Installation**: `pip install aipartnerupflow[templates]`
-
 ## Examples (`examples/`)
 
 Predefined example implementations for learning and customization.

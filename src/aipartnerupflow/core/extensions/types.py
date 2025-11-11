@@ -45,7 +45,7 @@ class ExtensionCategory(str, Enum):
     """Routing implementations (executor selection, load balancing)"""
     
     TEMPLATE = "template"
-    """Template implementations (task templates, planners, creators)"""
+    """Template implementations (reserved for future use)"""
 
 
 __all__ = ["ExtensionCategory"]

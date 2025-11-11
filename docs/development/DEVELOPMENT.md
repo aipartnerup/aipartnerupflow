@@ -14,8 +14,7 @@ aipartnerupflow/
 │   │   └── utils/           # Utility functions - CORE
 │   ├── extensions/          # Framework extensions
 │   │   ├── crewai/          # CrewAI support [crewai]
-│   │   ├── stdio/           # Stdio executor (local commands)
-│   │   └── templates/       # Template-based task creation [templates]
+│   │   └── stdio/           # Stdio executor (local commands)
 │   ├── examples/            # Examples [examples]
 │   ├── api/                 # API service layer [api]
 │   ├── cli/                 # CLI tools [cli]
@@ -431,7 +430,6 @@ xdg-open htmlcov/index.html  # Linux
 
 **Core Modules** (always included with `pip install aipartnerupflow`):
 - **`execution/`**: Task orchestration specifications (TaskManager, StreamingCallbacks)
-- **`extensions/templates/`**: Template-based task creation (TaskPlanner, TaskCreator) [templates]
 - **`interfaces/`**: Core interfaces (ExecutableTask, BaseTask, TaskStorage)
 - **`storage/`**: Storage abstractions and implementations (DuckDB default, PostgreSQL optional)
 - **`utils/`**: Utility functions

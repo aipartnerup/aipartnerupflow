@@ -67,8 +67,8 @@ crewai = [
     "crewai-tools>=0.59.0,<1.0.0",
 ]
 
-# Template-based task creation (optional feature)
-templates = []
+# Templates feature removed - not planned for implementation
+# templates = []
 
 # Examples suite (predefined example implementations for learning)
 examples = [
@@ -88,7 +88,7 @@ dev = [
 
 # Full installation (all features)
 all = [
-    "aipartnerupflow[crewai,api,cli,postgres,examples,templates]",
+    "aipartnerupflow[crewai,api,cli,postgres,examples]",
 ]
 
 [project.scripts]

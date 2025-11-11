@@ -12,7 +12,7 @@ This module contains all core framework components for task orchestration:
 All core modules are always included (pip install aipartnerupflow).
 No optional dependencies required.
 
-Note: TaskPlanner (template-based task creation) is now in extensions/templates/ [templates]
+Note: TaskCreator (core) creates tasks from tasks array.
 Note: Protocol specifications are handled by A2A Protocol (Agent-to-Agent Protocol),
 which is the standard protocol for agent communication. See api/ module for A2A implementation.
 """
@@ -22,6 +22,7 @@ from aipartnerupflow.core.interfaces import ExecutableTask
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.execution import (
     TaskManager,
+    TaskCreator,
     StreamingCallbacks,
 )
 from aipartnerupflow.core.extensions import (
@@ -69,6 +70,7 @@ __all__ = [
     "TaskStatus",
     # Execution
     "TaskManager",
+    "TaskCreator",
     "StreamingCallbacks",
     # Extensions
     "Extension",

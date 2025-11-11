@@ -106,31 +106,6 @@ extensions/crewai/
 
 **Note**: BatchManager is part of [crewai] because it's specifically designed for batching multiple CrewAI crews together.
 
-#### [templates] - Template-based Task Creation
-
-```
-extensions/templates/
-├── __init__.py
-├── task_planner.py      # TaskPlanner - template management
-└── task_creator.py      # TaskCreator - create tasks from templates
-```
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-grep
-
-**Installation**: `pip install aipartnerupflow[templates]`
-
-**Purpose**: Create task trees from predefined templates.
-
-**Features**:
-- Template management (create, query templates)
-- Template-based task tree creation
-- Support for hierarchical templates
-- Input data preparation from templates
-
-**Use Case**: Users who want to define reusable task structures and instantiate them to create task trees.
-
-**Note**: This is an optional feature. The current implementation is simplified and can be extended with full database template support.
-
 #### [http_executor] - HTTP/Remote API Task Execution (Future)
 
 ```
@@ -209,7 +184,7 @@ pip install aipartnerupflow
 ```
 
 **Includes**:
-- Task orchestration specifications (TaskManager, TaskPlanner)
+- Task orchestration specifications (TaskManager)
 - Core interfaces (ExecutableTask, BaseTask, TaskStorage)
 - Storage (DuckDB default)
 - NO CrewAI dependency
@@ -245,7 +220,7 @@ pip install aipartnerupflow[ext]
 pip install aipartnerupflow[all]
 ```
 
-**Includes**: Core + crewai + batch + api + cli + ext + postgres
+**Includes**: Core + crewai + batch + api + cli + examples + postgres
 
 ## Core Components
 

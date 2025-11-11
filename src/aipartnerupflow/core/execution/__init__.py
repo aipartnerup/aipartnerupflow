@@ -3,6 +3,7 @@ Execution module for task management and distribution
 """
 
 from aipartnerupflow.core.execution.task_manager import TaskManager
+from aipartnerupflow.core.execution.task_creator import TaskCreator
 from aipartnerupflow.core.execution.streaming_callbacks import StreamingCallbacks
 from aipartnerupflow.core.execution.executor_registry import (
     ExecutorRegistry,
@@ -12,6 +13,7 @@ from aipartnerupflow.core.execution.executor_registry import (
 
 __all__ = [
     "TaskManager",
+    "TaskCreator",
     "StreamingCallbacks",
     "ExecutorRegistry",
     "get_registry",

@@ -47,13 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Streaming callbacks integration with A2A Protocol EventQueue
   - Real-time task execution progress updates
 
-- **Optional Features**
-  - Template-based task creation (`[templates]` extra)
-  - Task templates and task creator utilities
-
 ### Infrastructure
 - Project structure with `src-layout`
-- `pyproject.toml` with optional dependencies (`[api]`, `[templates]`, `[all]`)
+- `pyproject.toml` with optional dependencies (`[api]`, `[crewai]`, `[cli]`, `[postgres]`, `[examples]`, `[all]`)
 - Comprehensive documentation in `docs/` directory
 - Test suite with pytest fixtures
 - Modular architecture separating core from optional features

@@ -11,11 +11,9 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 - Core interfaces (ExecutableTask, BaseTask, TaskStorage)
 - Storage (DuckDB default, PostgreSQL optional)
 - **NO CrewAI dependency** (available via [crewai] extra)
-- **NO template dependency** (available via [templates] extra)
 
 **Optional features:**
 - **CrewAI Support** [crewai]: LLM-based agent crews via CrewManager (task executor implementation)
-- **Template-based Task Creation** [templates]: Create task trees from predefined templates via TaskPlanner and TaskCreator
 - **HTTP Executor** [http]: Remote API calls via HTTPExecutor (future, task executor implementation)
 - **Examples** [examples]: Predefined example implementations for learning and quick start
 - **API Server** [api]: A2A Protocol Server (A2A Protocol is the standard protocol for agent communication)
@@ -261,7 +259,6 @@ include additional FastAPI REST API endpoints for direct HTTP access without the
 │        Task Orchestration Specification Layer (CORE)         │
 │        - TaskManager: Task tree orchestration, dependency  │
 │          management, priority scheduling                     │
-│        - TaskPlanner: Task planning and template management │
 │        - ExecutableTask: Unified task interface             │
 └─────────────────────────────────────────────────────────────┘
                           ↓
@@ -287,15 +284,14 @@ For detailed directory structure, see [docs/architecture/DIRECTORY_STRUCTURE.md]
 
 **Quick overview:**
 - `core/` - Core framework (task orchestration, interfaces, storage, utils)
-- `extensions/` - Framework extensions (crewai, stdio, templates)
+- `extensions/` - Framework extensions (crewai, stdio)
 - `examples/` - Example implementations for learning
 - `api/` - A2A Protocol Server
 - `cli/` - CLI tools
 
 **Installation Strategy**:
-- `pip install aipartnerupflow`: Core library only (execution, base, storage, utils) - **NO CrewAI, NO templates**
+- `pip install aipartnerupflow`: Core library only (execution, base, storage, utils) - **NO CrewAI**
 - `pip install aipartnerupflow[crewai]`: Core + CrewAI support (includes BatchManager)
-- `pip install aipartnerupflow[templates]`: Core + Template-based task creation
 - `pip install aipartnerupflow[examples]`: Core + Example implementations
 - `pip install aipartnerupflow[api]`: Core + API server
 - `pip install aipartnerupflow[cli]`: Core + CLI tools
