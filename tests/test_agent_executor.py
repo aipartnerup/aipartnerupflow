@@ -168,8 +168,8 @@ class TestAgentExecutor:
             }
         ]
         
-        # _build_task_tree_from_tasks doesn't need storage parameter
-        task_tree = executor._build_task_tree_from_tasks(tasks)
+        # Use task_executor's _build_task_tree_from_tasks method
+        task_tree = executor.task_executor._build_task_tree_from_tasks(tasks)
         
         assert task_tree is not None
         assert task_tree.task.id == "root-task"
@@ -237,33 +237,28 @@ class TestAgentExecutor:
         
         context = self._create_request_context(tasks)
         
-        # Mock TaskManager and get_default_session
-        with patch('aipartnerupflow.api.agent_executor.TaskManager') as mock_manager_class, \
-             patch('aipartnerupflow.api.agent_executor.get_default_session') as mock_storage:
+        # Mock TaskExecutor and get_default_session
+        # Use patch to ensure mock is properly cleaned up after test
+        # This is important because TaskExecutor is a singleton, and mocks can leak to other tests
+        with patch('aipartnerupflow.api.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'execute_tasks') as mock_execute_tasks:
+            mock_get_session.return_value = Mock()
             
-            mock_storage.return_value = Mock()
+            # Mock TaskExecutor.execute_tasks (which handles building tree, saving, and execution)
+            mock_execution_result = {
+                "status": "completed",
+                "progress": 1.0,
+                "root_task_id": "task-1"
+            }
+            mock_execute_tasks.return_value = mock_execution_result
             
-            mock_manager = AsyncMock()
-            mock_manager_class.return_value = mock_manager
-            mock_manager.distribute_task_tree = AsyncMock()
-            mock_manager.distribute_task_tree.return_value = None
+            result = await executor._execute_simple_mode(context, mock_event_queue)
             
-            # Mock task tree
-            from aipartnerupflow.core.types import TaskTreeNode
-            mock_task_node = Mock(spec=TaskTreeNode)
-            mock_task_node.task = Mock()
-            mock_task_node.task.id = "task-1"
-            mock_task_node.task.status = "completed"
-            mock_task_node.task.result = {"output": "result"}
-            mock_task_node.children = []  # Add children attribute (empty list for leaf node)
-            mock_task_node.calculate_status = Mock(return_value="completed")
-            mock_task_node.calculate_progress = Mock(return_value=1.0)
-            
-            with patch.object(executor, '_build_task_tree_from_tasks', return_value=mock_task_node):
-                result = await executor._execute_simple_mode(context, mock_event_queue)
-                
-                # Should have executed
-                assert mock_manager.distribute_task_tree.called
+            # Should have executed
+            assert mock_execute_tasks.called
+            assert result is not None
+            assert result["status"] == "completed"
+            assert result["root_task_id"] == "task-1"
     
     # ============================================================================
     # Integration Tests (Real Database)
@@ -271,7 +266,7 @@ class TestAgentExecutor:
     
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_execute_system_resource_monitoring(self, executor, sync_db_session, mock_event_queue):
+    async def test_execute_system_resource_monitoring(self, sync_db_session, mock_event_queue):
         """
         Integration test: Real task tree execution for system resource monitoring
         
@@ -328,11 +323,16 @@ class TestAgentExecutor:
                 "result": result,
             })
         
-        # Create a new executor AFTER registering hooks
-        # The executor fixture reads hooks at initialization time,
-        # so we need to create a new one after hooks are registered
+        # Create executor AFTER registering hooks
+        # In production, hooks are registered at application startup before executor creation
+        # For testing, we register hooks first, then create executor to match production pattern
+        # Since TaskExecutor is singleton, we need to refresh its config to pick up newly registered hooks
         from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
-        executor_with_hooks = AIPartnerUpFlowAgentExecutor()
+        from aipartnerupflow.core.execution.task_executor import TaskExecutor
+        executor = AIPartnerUpFlowAgentExecutor()
+        # Refresh TaskExecutor singleton's hooks to pick up newly registered hooks
+        # This is only needed for testing; in production, hooks are registered before executor creation
+        TaskExecutor().refresh_config()
         
         user_id = "test-user-real"
         
@@ -412,11 +412,14 @@ class TestAgentExecutor:
         context = self._create_request_context(tasks)
         
         # Execute in simple mode with real database
-        with patch('aipartnerupflow.api.agent_executor.get_default_session') as mock_get_session:
-            mock_get_session.return_value = sync_db_session
+        # Mock get_default_session in both agent_executor and task_executor modules
+        with patch('aipartnerupflow.api.agent_executor.get_default_session') as mock_get_session_agent, \
+             patch('aipartnerupflow.core.execution.task_executor.get_default_session') as mock_get_session_executor:
+            mock_get_session_agent.return_value = sync_db_session
+            mock_get_session_executor.return_value = sync_db_session
             
             # Execute using executor with hooks
-            result = await executor_with_hooks.execute(context, mock_event_queue)
+            result = await executor.execute(context, mock_event_queue)
             logger.info(f"==result==\n {json.dumps(result, indent=4)}")
             # Verify result structure - result should contain task tree execution status
             assert result is not None
@@ -547,7 +550,7 @@ class TestAgentExecutor:
     
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_execute_with_custom_task_model_and_hooks(self, executor, sync_db_session, mock_event_queue):
+    async def test_execute_with_custom_task_model_and_hooks(self, sync_db_session, mock_event_queue):
         """
         Integration test: Real task execution with custom TaskModel and decorator-based hooks
         
@@ -642,10 +645,16 @@ class TestAgentExecutor:
         # Set custom TaskModel using decorator API (after hooks are registered)
         set_task_model_class(CustomTaskModel)
         
-        # Recreate executor to pick up newly registered hooks and custom TaskModel
-        # (executor fixture initializes before hooks and TaskModel are registered)
+        # Create executor AFTER registering hooks and setting custom TaskModel
+        # In production, hooks and TaskModel are registered at application startup before executor creation
+        # For testing, we register hooks and set TaskModel first, then create executor to match production pattern
+        # Since TaskExecutor is singleton, we need to refresh its config to pick up newly registered hooks and model
         from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
+        from aipartnerupflow.core.execution.task_executor import TaskExecutor
         executor = AIPartnerUpFlowAgentExecutor()
+        # Refresh TaskExecutor singleton's hooks and model to pick up newly registered values
+        # This is only needed for testing; in production, hooks and model are registered before executor creation
+        TaskExecutor().refresh_config()
         
         # ========================================================================
         # Step 3: Create and execute task with custom model
@@ -654,7 +663,7 @@ class TestAgentExecutor:
         project_id = "test-project-123"
         
         # Create task using repository with custom model (to set project_id)
-        # Then execute via executor
+        # Then execute via executor using require_existing_tasks=True mode
         repo = TaskRepository(sync_db_session, task_model_class=CustomTaskModel)
         
         # Create task with custom field first (using kwargs for id)
@@ -677,33 +686,24 @@ class TestAgentExecutor:
         assert task.id == "custom-task-1"
         assert task.project_id == project_id
         
-        # Now execute the task via executor
-        # Note: Don't pass input_data in tasks dict, let executor use the existing task's input_data
-        # This ensures pre-hook modifications are preserved
+        # Now execute the task via executor using require_existing_tasks=True
+        # This mode loads existing tasks from database instead of creating new ones
         tasks = [
             {
                 "id": "custom-task-1",  # Use same ID as created task
-                "user_id": user_id,
-                "name": "Custom Task with Project",
-                "status": "pending",
-                "priority": 1,
-                "has_children": False,
-                "dependencies": [],
-                "schemas": {
-                    "type": "stdio",
-                    "method": "system_info"
-                },
-                # Don't pass input_data here - let executor use existing task's input_data
-                # This ensures pre-hook modifications are not overwritten
-                "project_id": project_id  # Custom field for reference
+                # Only need id for require_existing_tasks=True mode
             }
         ]
         
-        context = self._create_request_context(tasks)
+        # Set require_existing_tasks=True in metadata to use existing task mode
+        context = self._create_request_context(tasks, metadata={"require_existing_tasks": True})
         
         # Execute with real database and custom model
-        with patch('aipartnerupflow.api.agent_executor.get_default_session') as mock_get_session:
-            mock_get_session.return_value = sync_db_session
+        # Mock get_default_session in both agent_executor and task_executor modules
+        with patch('aipartnerupflow.api.agent_executor.get_default_session') as mock_get_session_agent, \
+             patch('aipartnerupflow.core.execution.task_executor.get_default_session') as mock_get_session_executor:
+            mock_get_session_agent.return_value = sync_db_session
+            mock_get_session_executor.return_value = sync_db_session
             
             # Execute using executor with custom config
             result = await executor.execute(context, mock_event_queue)

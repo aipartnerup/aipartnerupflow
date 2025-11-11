@@ -77,6 +77,7 @@ class TaskRepository:
         input_data: Optional[Dict[str, Any]] = None,
         schemas: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
+        id: Optional[str] = None,  # Optional task ID (if not provided, TaskModel will auto-generate)
         **kwargs  # User-defined custom fields (e.g., project_id, department, etc.)
     ) -> TaskModelType:
         """
@@ -91,6 +92,8 @@ class TaskRepository:
             input_data: Input data for the task
             schemas: Task schemas
             params: Task parameters
+            id: Optional task ID. If not provided, TaskModel will auto-generate using default (UUID).
+                If provided, will use the specified ID.
             **kwargs: User-defined custom fields (e.g., project_id="proj-123", department="engineering")
                 These fields will be set on the task if they exist as columns in the TaskModel
                 Example: create_task(..., project_id="proj-123", department="engineering")
@@ -113,10 +116,21 @@ class TaskRepository:
             "has_children": False,
         }
         
+        # Set id if provided (otherwise TaskModel will use its default)
+        if id is not None:
+            task_data["id"] = id
+        
         # Add custom fields from kwargs if they exist as columns in the TaskModel
         # This allows users to pass custom fields like project_id, department, etc.
+        # Note: 'id' should not be passed via kwargs, use the id parameter instead
         for key, value in kwargs.items():
-            if hasattr(self.task_model_class, key) or key in self.task_model_class.__table__.columns:
+            if key == "id":
+                logger.warning(
+                    "id should be passed as a named parameter, not via kwargs. "
+                    "Ignoring id from kwargs."
+                )
+                continue
+            elif hasattr(self.task_model_class, key) or key in self.task_model_class.__table__.columns:
                 task_data[key] = value
             else:
                 logger.warning(

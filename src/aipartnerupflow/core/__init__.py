@@ -45,6 +45,10 @@ from aipartnerupflow.core.decorators import (
     set_task_model_class,
     get_task_model_class,
     clear_config,
+    set_use_task_creator,
+    get_use_task_creator,
+    set_require_existing_tasks,
+    get_require_existing_tasks,
     extension_register,
 )
 from aipartnerupflow.core.config import (
@@ -84,6 +88,10 @@ __all__ = [
     "set_task_model_class",
     "get_task_model_class",
     "clear_config",
+    "set_use_task_creator",
+    "get_use_task_creator",
+    "set_require_existing_tasks",
+    "get_require_existing_tasks",
     "extension_register",
     # Configuration Registry (internal)
     "get_pre_hooks",

@@ -41,6 +41,8 @@ class ConfigRegistry:
         self._task_model_class: Optional[Type[TaskModel]] = None
         self._pre_hooks: List[TaskPreHook] = []
         self._post_hooks: List[TaskPostHook] = []
+        self._use_task_creator: bool = True  # Default to True for rigorous task creation
+        self._require_existing_tasks: bool = False  # Default to False for convenience (auto-create)
     
     def set_task_model_class(self, task_model_class: Optional[Type[TaskModel]]) -> None:
         """
@@ -109,11 +111,55 @@ class ConfigRegistry:
         """
         return self._post_hooks.copy()
     
+    def set_use_task_creator(self, use_task_creator: bool) -> None:
+        """
+        Set whether to use TaskCreator for rigorous task creation
+        
+        Args:
+            use_task_creator: If True, use TaskCreator.create_task_tree_from_array for rigorous validation.
+                             If False, use quick create mode (not recommended, may have issues).
+                             Default is True.
+        """
+        self._use_task_creator = use_task_creator
+        logger.debug(f"Set use_task_creator: {use_task_creator}")
+    
+    def get_use_task_creator(self) -> bool:
+        """
+        Get whether to use TaskCreator for task creation
+        
+        Returns:
+            True if TaskCreator should be used (default), False otherwise
+        """
+        return self._use_task_creator
+    
+    def set_require_existing_tasks(self, require_existing_tasks: bool) -> None:
+        """
+        Set whether to require tasks to exist before execution
+        
+        Args:
+            require_existing_tasks: If True, only execute tasks that already exist in database.
+                                  If False (default), create tasks if they don't exist (more convenient).
+                                  Default is False for convenience (auto-create).
+        """
+        self._require_existing_tasks = require_existing_tasks
+        logger.debug(f"Set require_existing_tasks: {require_existing_tasks}")
+    
+    def get_require_existing_tasks(self) -> bool:
+        """
+        Get whether to require tasks to exist before execution
+        
+        Returns:
+            True if only existing tasks should be executed, False if tasks can be auto-created (default)
+        """
+        return self._require_existing_tasks
+    
     def clear(self) -> None:
         """Clear all configuration (useful for testing)"""
         self._task_model_class = None
         self._pre_hooks.clear()
         self._post_hooks.clear()
+        self._use_task_creator = True  # Reset to default
+        self._require_existing_tasks = False  # Reset to default
         logger.debug("Cleared configuration registry")
 
 
@@ -251,6 +297,50 @@ def clear_config() -> None:
     _get_registry().clear()
 
 
+def set_use_task_creator(use_task_creator: bool) -> None:
+    """
+    Set whether to use TaskCreator for rigorous task creation
+    
+    Args:
+        use_task_creator: If True, use TaskCreator.create_task_tree_from_array for rigorous validation.
+                         If False, use quick create mode (not recommended, may have issues).
+                         Default is True.
+    """
+    _get_registry().set_use_task_creator(use_task_creator)
+
+
+def get_use_task_creator() -> bool:
+    """
+    Get whether to use TaskCreator for task creation
+    
+    Returns:
+        True if TaskCreator should be used (default), False otherwise
+    """
+    return _get_registry().get_use_task_creator()
+
+
+def set_require_existing_tasks(require_existing_tasks: bool) -> None:
+    """
+    Set whether to require tasks to exist before execution
+    
+    Args:
+        require_existing_tasks: If True, only execute tasks that already exist in database.
+                              If False (default), create tasks if they don't exist (more convenient).
+                              Default is False for convenience (auto-create).
+    """
+    _get_registry().set_require_existing_tasks(require_existing_tasks)
+
+
+def get_require_existing_tasks() -> bool:
+    """
+    Get whether to require tasks to exist before execution
+    
+    Returns:
+        True if only existing tasks should be executed, False if tasks can be auto-created (default)
+    """
+    return _get_registry().get_require_existing_tasks()
+
+
 __all__ = [
     "ConfigRegistry",
     "get_config",
@@ -261,5 +351,9 @@ __all__ = [
     "get_pre_hooks",
     "get_post_hooks",
     "clear_config",
+    "set_use_task_creator",
+    "get_use_task_creator",
+    "set_require_existing_tasks",
+    "get_require_existing_tasks",
 ]
 

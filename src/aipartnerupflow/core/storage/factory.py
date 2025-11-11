@@ -112,6 +112,7 @@ def create_session(
 
 def get_default_session(
     path: Optional[Union[str, Path]] = None,
+    async_mode: Optional[bool] = None,
     **kwargs
 ) -> Union[Session, AsyncSession]:
     """
@@ -119,6 +120,8 @@ def get_default_session(
     
     Args:
         path: DuckDB database path (default ":memory:")
+        async_mode: Whether to use async mode. If None, defaults to False for DuckDB (sync mode)
+                   since DuckDB doesn't support async drivers
         **kwargs: Other parameters
     
     Returns:
@@ -127,9 +130,13 @@ def get_default_session(
     global _default_session
     
     if _default_session is None:
+        # DuckDB doesn't support async drivers, so default to sync mode
+        if async_mode is None:
+            async_mode = False
         _default_session = create_session(
             dialect="duckdb",
             path=path or ":memory:",
+            async_mode=async_mode,
             **kwargs
         )
     

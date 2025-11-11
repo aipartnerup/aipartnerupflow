@@ -474,11 +474,10 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         request_id: str
     ) -> list:
         """
-        Handle running tasks list - returns list of currently running tasks
+        Handle running tasks list - returns list of currently running tasks from memory
         
         Params:
             user_id: Optional user ID filter (will be checked for permission)
-            status: Optional status filter (default: "in_progress")
             limit: Optional limit (default: 100)
         
         Returns:
@@ -486,7 +485,6 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         """
         try:
             user_id = params.get("user_id")
-            status_filter = params.get("status", "in_progress")
             limit = params.get("limit", 100)
             
             # Check permission if user_id is specified
@@ -499,30 +497,39 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                     user_id = authenticated_user_id
                 # If no JWT and no user_id, user_id remains None (list all tasks)
             
-            # Get database session and create repository
+            # Get running tasks from memory using TaskExecutor
+            from aipartnerupflow.core.execution.task_executor import TaskExecutor
+            task_executor = TaskExecutor()
+            running_task_ids = task_executor.get_all_running_tasks()
+            
+            if not running_task_ids:
+                return []
+            
+            # Get database session and create repository to fetch task details
             db_session = get_default_session()
             task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
             
-            # Query running tasks
-            # Note: TaskRepository doesn't have a list method yet, so we'll use a simple query
-            from sqlalchemy import select
-            query = select(self.task_model_class).where(
-                self.task_model_class.status == status_filter
-            )
+            # Fetch task details for running tasks
+            tasks = []
+            for task_id in running_task_ids[:limit]:  # Apply limit
+                task = await task_repository.get_task_by_id(task_id)
+                if task:
+                    # Apply user_id filter if specified
+                    if user_id and task.user_id != user_id:
+                        continue
+                    
+                    # Check permission to access this task
+                    try:
+                        self._check_permission(request, task.user_id, "access")
+                        tasks.append(task.to_dict())
+                    except ValueError:
+                        # Permission denied, skip this task
+                        logger.warning(f"Permission denied for task {task_id}")
             
-            if user_id:
-                query = query.where(self.task_model_class.user_id == user_id)
+            # Sort by created_at descending
+            tasks.sort(key=lambda t: t.get("created_at", ""), reverse=True)
             
-            query = query.limit(limit).order_by(self.task_model_class.created_at.desc())
-            
-            if task_repository.is_async:
-                result = await db_session.execute(query)
-                tasks = result.scalars().all()
-            else:
-                result = db_session.execute(query)
-                tasks = result.scalars().all()
-            
-            return [task.to_dict() for task in tasks]
+            return tasks
             
         except Exception as e:
             logger.error(f"Error getting running tasks list: {str(e)}", exc_info=True)
@@ -552,13 +559,24 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             if not task_ids:
                 return []
             
+            # Get TaskExecutor to check if tasks are running in memory
+            from aipartnerupflow.core.execution.task_executor import TaskExecutor
+            task_executor = TaskExecutor()
+            
             # Get database session and create repository
             db_session = get_default_session()
             task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
             
             statuses = []
             for task_id in task_ids:
-                task = await task_repository.get_task_by_id(task_id.strip())
+                task_id = task_id.strip()
+                
+                # First check if task is running in memory
+                is_running = task_executor.is_task_running(task_id)
+                
+                # Get task from database for details
+                task = await task_repository.get_task_by_id(task_id)
+                
                 if task:
                     # Check permission to access this task
                     try:
@@ -569,6 +587,7 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                             "status": task.status,
                             "progress": float(task.progress) if task.progress else 0.0,
                             "error": task.error,
+                            "is_running": is_running,  # Add in-memory running status
                             "started_at": task.started_at.isoformat() if task.started_at else None,
                             "updated_at": task.updated_at.isoformat() if task.updated_at else None,
                         })
@@ -581,19 +600,34 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                             "status": "permission_denied",
                             "progress": 0.0,
                             "error": str(e),
+                            "is_running": is_running,
                             "started_at": None,
                             "updated_at": None,
                         })
                 else:
-                    statuses.append({
-                        "task_id": task_id,
-                        "context_id": task_id,
-                        "status": "not_found",
-                        "progress": 0.0,
-                        "error": None,
-                        "started_at": None,
-                        "updated_at": None,
-                    })
+                    # Task not found in database, but check if it's running in memory
+                    if is_running:
+                        statuses.append({
+                            "task_id": task_id,
+                            "context_id": task_id,
+                            "status": "in_progress",  # Running but not yet saved to DB
+                            "progress": 0.0,
+                            "error": None,
+                            "is_running": True,
+                            "started_at": None,
+                            "updated_at": None,
+                        })
+                    else:
+                        statuses.append({
+                            "task_id": task_id,
+                            "context_id": task_id,
+                            "status": "not_found",
+                            "progress": 0.0,
+                            "error": None,
+                            "is_running": False,
+                            "started_at": None,
+                            "updated_at": None,
+                        })
             
             return statuses
             
@@ -631,46 +665,31 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                     user_id = authenticated_user_id
                 # If no JWT and no user_id, user_id remains None (count all tasks)
             
-            # Get database session and create repository
-            db_session = get_default_session()
-            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            # Get running tasks count from memory using TaskExecutor
+            from aipartnerupflow.core.execution.task_executor import TaskExecutor
+            task_executor = TaskExecutor()
             
-            from sqlalchemy import select, func
-            
-            if status_filter:
-                # Count specific status
-                query = select(func.count(self.task_model_class.id)).where(
-                    self.task_model_class.status == status_filter
-                )
-                if user_id:
-                    query = query.where(self.task_model_class.user_id == user_id)
+            if user_id:
+                # Filter by user_id: get all running tasks and filter by user_id
+                running_task_ids = task_executor.get_all_running_tasks()
+                if not running_task_ids:
+                    return {"count": 0, "user_id": user_id}
                 
-                if task_repository.is_async:
-                    result = await db_session.execute(query)
-                    count = result.scalar()
-                else:
-                    result = db_session.execute(query)
-                    count = result.scalar()
+                # Get database session to check user_id
+                db_session = get_default_session()
+                task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
                 
-                return {status_filter: count}
+                count = 0
+                for task_id in running_task_ids:
+                    task = await task_repository.get_task_by_id(task_id)
+                    if task and task.user_id == user_id:
+                        count += 1
+                
+                return {"count": count, "user_id": user_id}
             else:
-                # Count all statuses
-                query = select(
-                    self.task_model_class.status,
-                    func.count(self.task_model_class.id).label('count')
-                ).group_by(self.task_model_class.status)
-                
-                if user_id:
-                    query = query.where(self.task_model_class.user_id == user_id)
-                
-                if task_repository.is_async:
-                    result = await db_session.execute(query)
-                    rows = result.all()
-                else:
-                    result = db_session.execute(query)
-                    rows = result.all()
-                
-                return {row.status: row.count for row in rows}
+                # No user_id filter, return total count from memory
+                count = task_executor.get_running_tasks_count()
+                return {"count": count}
             
         except Exception as e:
             logger.error(f"Error getting running tasks count: {str(e)}", exc_info=True)

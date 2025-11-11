@@ -205,6 +205,8 @@ class TaskCreator:
                 )
             
             # Create task (parent_id and dependencies will be set in step 3)
+            # Pass id if provided (as optional parameter)
+            logger.debug(f"Creating task: name={task_name}, provided_id={provided_id}")
             task = await self.task_manager.task_repository.create_task(
                 name=task_name,
                 user_id=task_user_id,
@@ -214,7 +216,24 @@ class TaskCreator:
                 input_data=task_data.get("input_data"),
                 schemas=task_data.get("schemas"),
                 params=task_data.get("params"),
+                id=provided_id  # Optional: if None, TaskModel will auto-generate
             )
+            
+            logger.debug(f"Task created: id={task.id}, name={task.name}, provided_id={provided_id}")
+            
+            # Verify the task was created with the correct ID
+            if provided_id and task.id != provided_id:
+                logger.error(
+                    f"Task ID mismatch: expected {provided_id}, got {task.id}. "
+                    f"This indicates an issue with ID assignment."
+                )
+                raise ValueError(
+                    f"Task ID mismatch: expected {provided_id}, got {task.id}. "
+                    f"Task was not created with the specified ID."
+                )
+            
+            # Note: TaskRepository.create_task already commits and refreshes the task
+            # No need to commit again here
             
             created_tasks.append(task)
             
@@ -254,7 +273,8 @@ class TaskCreator:
                     )
             
             # Resolve dependencies to actual task ids
-            # Whether user provides id or name, we convert to actual task id (system-generated)
+            # Whether user provides id or name, we convert to actual task id
+            # If user provided id, use it; otherwise use system-generated UUID
             dependencies = task_data.get("dependencies")
             actual_dependencies = None
             if dependencies:
@@ -268,10 +288,10 @@ class TaskCreator:
                             # Find the actual task that corresponds to the dependency reference (id or name)
                             dep_task = identifier_to_task.get(dep_ref)
                             if dep_task:
-                                # Convert to actual task id (system-generated)
+                                # Use actual task id (user-provided if provided, otherwise system-generated)
                                 # Final structure is always: {"id": "actual_task_id", "required": bool, "type": str}
                                 actual_dependencies.append({
-                                    "id": dep_task.id,  # Always use actual task id, not user-provided id or name
+                                    "id": dep_task.id,  # Use actual task id (user-provided or system-generated)
                                     "required": dep.get("required", True),
                                     "type": dep.get("type", "result"),
                                 })
@@ -287,9 +307,9 @@ class TaskCreator:
                         dep_ref = str(dep)
                         dep_task = identifier_to_task.get(dep_ref)
                         if dep_task:
-                            # Convert to actual task id
+                            # Use actual task id (user-provided or system-generated)
                             actual_dependencies.append({
-                                "id": dep_task.id,  # Always use actual task id
+                                "id": dep_task.id,  # Use actual task id
                                 "required": True,
                                 "type": "result",
                             })

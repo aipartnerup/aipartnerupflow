@@ -6,7 +6,7 @@ import typer
 import json
 from typing import Optional
 from pathlib import Path
-from aipartnerupflow.cli.commands import run, serve, daemon, list_flows
+from aipartnerupflow.cli.commands import run, serve, daemon, list_flows, tasks
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -23,6 +23,7 @@ app.add_typer(run.app, name="run", help="Run a flow")
 app.add_typer(serve.app, name="serve", help="Start API server")
 app.add_typer(daemon.app, name="daemon", help="Manage daemon")
 app.add_typer(list_flows.app, name="list", help="List available flows")
+app.add_typer(tasks.app, name="tasks", help="Manage and query tasks")
 
 
 @app.command()

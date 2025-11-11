@@ -1,0 +1,655 @@
+"""
+Task executor for AIPartnerUpFlow that manages task tree execution
+"""
+import uuid
+import copy
+from typing import Dict, Any, List, Optional, Union
+from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from aipartnerupflow.core.execution.task_manager import TaskManager
+from aipartnerupflow.core.execution.task_tracker import TaskTracker
+from aipartnerupflow.core.types import TaskTreeNode
+from aipartnerupflow.core.storage import get_default_session
+from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+from aipartnerupflow.core.config import (
+    get_task_model_class,
+    get_pre_hooks,
+    get_post_hooks,
+    get_use_task_creator,
+    get_require_existing_tasks,
+)
+from aipartnerupflow.core.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class TaskExecutor:
+    """
+    Task executor - Singleton pattern for task execution and tracking
+    
+    This is a singleton to ensure resource efficiency and shared state.
+    Hooks and task model are read from the config registry at initialization time.
+    
+    Design rationale:
+    - Singleton: Saves memory, shared TaskTracker state
+    - Static hooks: Hooks are registered at application startup (module import time)
+    - Performance: Hooks are cached, no registry lookup on each execution
+    - Production reality: Hooks don't change at runtime (even in multi-user scenarios,
+      hooks handle user logic internally, but the hook list itself is static)
+    """
+    
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(TaskExecutor, cls).__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        if not TaskExecutor._initialized:
+            # TaskTracker is singleton for shared state (running tasks)
+            self.task_tracker = TaskTracker()
+            # Read configuration from registry at initialization (static hooks)
+            # In production, hooks are registered at application startup
+            self.task_model_class = get_task_model_class()
+            self.pre_hooks = get_pre_hooks()
+            self.post_hooks = get_post_hooks()
+            TaskExecutor._initialized = True
+            logger.info(
+                f"Initialized TaskExecutor "
+                f"(TaskModel: {self.task_model_class.__name__}, "
+                f"pre_hooks: {len(self.pre_hooks)}, "
+                f"post_hooks: {len(self.post_hooks)})"
+            )
+    
+    def refresh_config(self):
+        """
+        Refresh configuration from registry (for testing scenarios)
+        
+        In production, hooks are registered at startup before TaskExecutor creation,
+        so this method is not needed. It's provided for testing scenarios where
+        hooks are registered after TaskExecutor initialization.
+        """
+        self.task_model_class = get_task_model_class()
+        self.pre_hooks = get_pre_hooks()
+        self.post_hooks = get_post_hooks()
+        logger.debug(
+            f"Refreshed TaskExecutor config "
+            f"(TaskModel: {self.task_model_class.__name__}, "
+            f"pre_hooks: {len(self.pre_hooks)}, "
+            f"post_hooks: {len(self.post_hooks)})"
+        )
+
+    async def execute_task_tree(
+        self,
+        task_tree: TaskTreeNode,
+        root_task_id: str,
+        use_streaming: bool = False,
+        streaming_callbacks_context: Optional[Any] = None,
+        db_session: Optional[Union[Session, AsyncSession]] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute a task tree
+        
+        Args:
+            task_tree: Root TaskTreeNode to execute
+            root_task_id: Root task ID
+            use_streaming: Whether to use streaming mode
+            streaming_callbacks_context: Context for streaming callbacks (if use_streaming is True)
+            db_session: Optional database session (defaults to get_default_session())
+            
+        Returns:
+            Execution result dictionary
+        """
+        if db_session is None:
+            db_session = get_default_session()
+        
+        # Start task tracking
+        await self.start_task_tracking(root_task_id)
+        
+        try:
+            # Create TaskManager with hooks (cached at initialization)
+            # In production, hooks are registered at application startup before TaskExecutor creation
+            task_manager = TaskManager(
+                db_session,
+                root_task_id=root_task_id,
+                pre_hooks=self.pre_hooks,
+                post_hooks=self.post_hooks
+            )
+            
+            if use_streaming and streaming_callbacks_context:
+                task_manager.stream = True
+                # Set streaming context - streaming_callbacks_context is EventQueueBridge
+                # which has put() method that StreamingCallbacks can use
+                task_manager.streaming_callbacks.set_streaming_context(
+                    streaming_callbacks_context,  # EventQueueBridge acts as event_queue
+                    None  # context will be set by the caller if needed
+                )
+                # Execute with streaming
+                await task_manager.distribute_task_tree_with_streaming(
+                    task_tree, 
+                    use_callback=True
+                )
+            else:
+                # Execute without streaming
+                await task_manager.distribute_task_tree(task_tree, use_callback=True)
+            
+            # Reload task tree from database to get updated status
+            from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            updated_root_task = await task_repository.get_task_by_id(task_tree.task.id)
+            
+            if updated_root_task:
+                final_status = updated_root_task.status
+                # Safely convert progress to float
+                try:
+                    if updated_root_task.progress is not None:
+                        if isinstance(updated_root_task.progress, (int, float)):
+                            final_progress = float(updated_root_task.progress)
+                        elif isinstance(updated_root_task.progress, str):
+                            final_progress = float(updated_root_task.progress)
+                        else:
+                            final_progress = task_tree.calculate_progress()
+                    else:
+                        final_progress = 0.0
+                except (ValueError, TypeError):
+                    final_progress = task_tree.calculate_progress()
+            else:
+                final_status = task_tree.calculate_status()
+                final_progress = task_tree.calculate_progress()
+            
+            return {
+                "status": final_status,
+                "progress": final_progress,
+                "root_task_id": task_tree.task.id
+            }
+            
+        except Exception as e:
+            logger.error(f"Error executing task tree: {str(e)}", exc_info=True)
+            raise
+        finally:
+            # Stop task tracking
+            await self.stop_task_tracking(root_task_id)
+
+    async def start_task_tracking(self, context_id: str) -> None:
+        """Start tracking a task"""
+        await self.task_tracker.start_task_tracking(context_id)
+
+    async def stop_task_tracking(self, context_id: str) -> None:
+        """Stop tracking a task"""
+        await self.task_tracker.stop_task_tracking(context_id)
+
+    def get_task_status(self, context_id: str) -> Dict[str, Any]:
+        """Get task status by context_id"""
+        return self.task_tracker.get_task_status(context_id)
+    
+    def get_all_running_tasks(self) -> List[str]:
+        """Get all running task context_ids"""
+        return self.task_tracker.get_all_running_tasks()
+    
+    def get_running_tasks_count(self) -> int:
+        """Get count of running tasks"""
+        return self.task_tracker.get_running_tasks_count()
+    
+    def is_task_running(self, context_id: str) -> bool:
+        """Check if a task is running"""
+        return self.task_tracker.is_task_running(context_id)
+
+    def _build_task_tree_from_tasks(
+        self,
+        tasks: List[Dict[str, Any]]
+    ) -> TaskTreeNode:
+        """
+        Build TaskTreeNode from tasks array
+        
+        Args:
+            tasks: List of task dictionaries
+            
+        Returns:
+            Root TaskTreeNode
+        """
+        if not tasks:
+            raise ValueError("Tasks array is empty")
+        
+        # Create TaskModel instances from task dictionaries
+        task_models = []
+        task_dict_map = {}  # Map task_id to task dict for building tree
+        
+        for task_dict in tasks:
+            # Extract task data
+            task_id = task_dict.get("id") or str(uuid.uuid4())
+            parent_id = task_dict.get("parent_id")
+            user_id = task_dict.get("user_id")
+            if not user_id:
+                raise ValueError(f"Task {task_id} missing required user_id")
+            
+            # Create TaskModel using configured class (supports custom TaskModel)
+            # Only set fields that are explicitly provided in task_dict
+            # This ensures that None values mean "don't update" in _save_tasks_to_database
+            task_data = {
+                "id": task_id,
+                "parent_id": parent_id,
+                "user_id": user_id,
+                "name": task_dict.get("name", "Unnamed Task"),  # Required field, has default
+                "status": task_dict.get("status", "pending"),  # Required field, has default
+                "priority": task_dict.get("priority", 1),  # Required field, has default
+                "has_children": task_dict.get("has_children", False),  # Required field, has default
+                "progress": task_dict.get("progress", 0.0),  # Required field, has default
+            }
+            
+            # Optional fields: only set if explicitly provided in task_dict
+            # This allows None values to mean "don't update" in _save_tasks_to_database
+            if "dependencies" in task_dict:
+                task_data["dependencies"] = task_dict["dependencies"]
+            if "input_data" in task_dict:
+                task_data["input_data"] = task_dict["input_data"]
+            if "params" in task_dict:
+                task_data["params"] = task_dict["params"]
+            if "schemas" in task_dict:
+                task_data["schemas"] = task_dict["schemas"]
+            if "result" in task_dict:
+                task_data["result"] = task_dict["result"]
+            if "error" in task_dict:
+                task_data["error"] = task_dict["error"]
+            
+            # Add any custom fields from task_dict (e.g., project_id)
+            # These will be set if they exist as columns in the TaskModel
+            # Check both class attributes and table columns for custom fields
+            for key, value in task_dict.items():
+                if key not in task_data:
+                    # Check if field exists as class attribute or table column
+                    has_attr = hasattr(self.task_model_class, key)
+                    has_column = hasattr(self.task_model_class, '__table__') and key in self.task_model_class.__table__.columns
+                    if has_attr or has_column:
+                        task_data[key] = value
+            
+            task_model = self.task_model_class(**task_data)
+            
+            task_models.append(task_model)
+            task_dict_map[task_id] = {"model": task_model, "dict": task_dict}
+        
+        # Build tree structure
+        # Find root task (no parent_id)
+        root_task_model = None
+        for task_model in task_models:
+            if not task_model.parent_id:
+                root_task_model = task_model
+                break
+        
+        if not root_task_model:
+            raise ValueError("No root task found (task without parent_id)")
+        
+        # Build tree recursively
+        def build_node(task_id: str) -> TaskTreeNode:
+            """Recursively build tree node"""
+            task_info = task_dict_map.get(task_id)
+            if not task_info:
+                raise ValueError(f"Task {task_id} not found in tasks array")
+            
+            node = TaskTreeNode(task_info["model"])
+            
+            # Find and add children
+            for other_task_id, other_info in task_dict_map.items():
+                if other_info["dict"].get("parent_id") == task_id:
+                    child_node = build_node(other_task_id)
+                    node.add_child(child_node)
+            
+            return node
+        
+        root_node = build_node(root_task_model.id)
+        logger.info(f"Built task tree: root {root_task_model.id} with {len(root_node.children)} direct children")
+        
+        return root_node
+
+    async def _save_tasks_to_database(
+        self,
+        task_tree: TaskTreeNode,
+        db_session: Union[Session, AsyncSession]
+    ):
+        """
+        Save all tasks in the tree to database
+        
+        This method handles both new task creation and existing task updates.
+        For existing tasks, it intelligently merges data:
+        - Only updates fields that are explicitly provided (not None)
+        - Deep merges input_data instead of overwriting
+        - Preserves existing custom fields if not in update data
+        - Uses task_model_class to dynamically determine fields (no hardcoded field lists)
+        
+        Args:
+            task_tree: Root task tree node
+            db_session: Database session
+        """
+        is_async = isinstance(db_session, AsyncSession)
+        
+        # Get all column names from the model class (supports custom TaskModel)
+        # This avoids hardcoding field names and makes the code maintainable
+        model_columns = set(self.task_model_class.__table__.columns.keys())
+        
+        # Fields that should never be updated (read-only or auto-managed)
+        readonly_fields = {'id', 'created_at', 'updated_at'}
+        
+        def should_update_field(key: str, value: Any, existing_value: Any) -> bool:
+            """
+            Determine if a field should be updated
+            
+            Principle: Only update fields that are explicitly provided (not None).
+            If a field is None in tasks dict, it means "don't update this field".
+            
+            Args:
+                key: Field name
+                value: New value from node.task
+                existing_value: Existing value in database
+                
+            Returns:
+                True if field should be updated, False otherwise
+            """
+            # Skip readonly fields
+            if key in readonly_fields:
+                return False
+            
+            # Skip non-model fields (internal attributes)
+            if key.startswith('_') or key not in model_columns:
+                return False
+            
+            # Only update if value is explicitly provided (not None)
+            # This preserves existing fields if not in update data
+            # Applies to all fields uniformly - no special cases for execution state
+            return value is not None
+        
+        def merge_input_data(existing: dict, new: dict, task_id: str) -> dict:
+            """
+            Deep merge new input_data into existing input_data
+            
+            This preserves pre-hook modifications while allowing updates to specific fields.
+            
+            Principle:
+            - If new is None: means "not provided" - preserve existing unchanged
+            - If new is empty dict ({}): means user explicitly wants to clear input_data - update to {}
+              This could happen if pre-hooks filtered out all invalid fields
+            - If new has content: merge it into existing (preserving existing keys, updating new keys)
+            - This allows updating only specific fields in input_data without overwriting the entire dict
+            
+            Args:
+                existing: Existing input_data from database (may contain pre-hook modifications)
+                new: New input_data from node.task (from tasks dict)
+                task_id: Task ID for logging purposes
+                
+            Returns:
+                Merged input_data dictionary
+            """
+            # None means not provided - preserve existing
+            if new is None:
+                return existing
+            
+            # Empty dict means user explicitly wants to clear input_data
+            # This could happen if pre-hooks filtered out all invalid fields
+            # Log a warning but allow it (executor should handle validation)
+            if not new:
+                logger.warning(
+                    f"Task {task_id}: input_data is empty dict - this may cause execution failure. "
+                    f"Consider validating input_data before execution."
+                )
+                return {}
+            
+            # No existing data - use new
+            if not existing:
+                return copy.deepcopy(new)
+            
+            # Deep merge: existing data is preserved, new data overwrites specific keys
+            # This allows updating only specific fields in input_data
+            # Example: existing={'resource': 'cpu', '_pre_hook_executed': True}, new={'resource': 'memory'}
+            # Result: {'resource': 'memory', '_pre_hook_executed': True}
+            merged = copy.deepcopy(existing)
+            merged.update(copy.deepcopy(new))
+            return merged
+        
+        async def save_node_async(node: TaskTreeNode):
+            """Recursively save tasks (async)"""
+            # Check if task already exists
+            existing = await db_session.get(self.task_model_class, node.task.id)
+            
+            if not existing:
+                # New task: add directly
+                db_session.add(node.task)
+            else:
+                # Existing task: update fields intelligently
+                for key, value in node.task.__dict__.items():
+                    if not hasattr(existing, key):
+                        continue
+                    
+                    if not should_update_field(key, value, getattr(existing, key, None)):
+                        continue
+                    
+                    # Special handling for input_data: deep merge instead of overwrite
+                    # This preserves pre-hook modifications
+                    if key == 'input_data':
+                        existing_value = existing.input_data or {}
+                        new_value = value  # Keep original value (could be None or {})
+                        merged_value = merge_input_data(existing_value, new_value, existing.id)
+                        setattr(existing, key, merged_value)
+                    else:
+                        # For other fields: direct update
+                        setattr(existing, key, value)
+            
+            # Recursively save children
+            for child in node.children:
+                await save_node_async(child)
+        
+        def save_node_sync(node: TaskTreeNode):
+            """Recursively save tasks (sync)"""
+            # Check if task already exists
+            result = db_session.execute(select(self.task_model_class).filter(self.task_model_class.id == node.task.id))
+            existing = result.scalar_one_or_none()
+            
+            if not existing:
+                # New task: add directly
+                db_session.add(node.task)
+            else:
+                # Existing task: update fields intelligently
+                for key, value in node.task.__dict__.items():
+                    if not hasattr(existing, key):
+                        continue
+                    
+                    if not should_update_field(key, value, getattr(existing, key, None)):
+                        continue
+                    
+                    # Special handling for input_data: deep merge instead of overwrite
+                    # This preserves pre-hook modifications
+                    if key == 'input_data':
+                        existing_value = existing.input_data or {}
+                        new_value = value  # Keep original value (could be None or {})
+                        merged_value = merge_input_data(existing_value, new_value, existing.id)
+                        setattr(existing, key, merged_value)
+                    else:
+                        # For other fields: direct update
+                        setattr(existing, key, value)
+            
+            # Recursively save children
+            for child in node.children:
+                save_node_sync(child)
+        
+        # Save all tasks
+        if is_async:
+            await save_node_async(task_tree)
+            await db_session.commit()
+        else:
+            save_node_sync(task_tree)
+            db_session.commit()
+        
+        logger.info(f"Saved task tree to database: root {task_tree.task.id}")
+
+    async def execute_tasks(
+        self,
+        tasks: List[Dict[str, Any]],
+        root_task_id: Optional[str] = None,
+        use_streaming: bool = False,
+        streaming_callbacks_context: Optional[Any] = None,
+        require_existing_tasks: Optional[bool] = None,
+        db_session: Optional[Union[Session, AsyncSession]] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute tasks from a list of task dictionaries
+        
+        This method supports two modes:
+        
+        1. **Auto-Create and Execute (require_existing_tasks=False, default)**:
+           - Creates tasks if they don't exist in database (more convenient)
+           - Uses TaskCreator for rigorous task creation (configurable via get_use_task_creator())
+           - Validates dependencies and hierarchy
+           - Recommended for most use cases
+        
+        2. **Execute Existing Only (require_existing_tasks=True)**:
+           - Only executes tasks that already exist in database
+           - Loads task tree from database
+           - Tasks should be a list of task IDs or task dictionaries with existing IDs
+           - Suitable when tasks are pre-created via API (e.g., frontend interaction workflow)
+        
+        The behavior is controlled by:
+        - `require_existing_tasks` parameter (takes precedence)
+        - Global configuration `get_require_existing_tasks()` (used if parameter is None)
+        - Default: False (auto-create for convenience)
+        
+        The use of TaskCreator is controlled by global configuration (get_use_task_creator()).
+        By default, TaskCreator is used for rigorous validation. This can be configured via:
+            from aipartnerupflow.core.config import set_use_task_creator
+            set_use_task_creator(True)  # Use TaskCreator (default, recommended)
+            set_use_task_creator(False) # Use quick create mode (not recommended)
+        
+        Args:
+            tasks: List of task dictionaries or task IDs (if require_existing_tasks=True)
+            root_task_id: Optional root task ID for tracking (defaults to root task's ID)
+            use_streaming: Whether to use streaming mode
+            streaming_callbacks_context: Context for streaming callbacks (if use_streaming is True)
+            require_existing_tasks: If True, only execute existing tasks. If False, create if not exist (default).
+                                  If None, uses global configuration get_require_existing_tasks().
+            db_session: Optional database session (defaults to get_default_session())
+            
+        Returns:
+            Execution result dictionary with status, progress, and root_task_id
+        """
+        if not tasks:
+            raise ValueError("No tasks provided")
+        
+        # Get database session
+        if db_session is None:
+            db_session = get_default_session()
+        
+        # Determine whether to require existing tasks
+        # Parameter takes precedence, then global config, then default to False
+        if require_existing_tasks is None:
+            require_existing_tasks = get_require_existing_tasks()
+        
+        # Check if tasks already exist in database
+        if require_existing_tasks:
+            # Only execute existing tasks
+            task_tree = await self._load_existing_task_tree(tasks, db_session)
+        else:
+            # Create tasks if they don't exist (auto-create mode)
+            # Use configuration to determine whether to use TaskCreator
+            use_task_creator = get_use_task_creator()
+            
+            if use_task_creator:
+                # Use TaskCreator for rigorous task creation (recommended)
+                from aipartnerupflow.core.execution.task_creator import TaskCreator
+                task_creator = TaskCreator(db_session)
+                logger.debug(f"Creating task tree from {len(tasks)} tasks with IDs: {[t.get('id') for t in tasks]}")
+                task_tree = await task_creator.create_task_tree_from_array(tasks)
+                logger.info(f"Created task tree using TaskCreator: root {task_tree.task.id}")
+                logger.debug(f"Root task details: id={task_tree.task.id}, name={task_tree.task.name}")
+            else:
+                # Use quick create mode (not recommended, may have issues)
+                logger.warning(
+                    "Using quick create mode (use_task_creator=False). "
+                    "This mode may have issues. Consider using TaskCreator (default) for rigorous validation."
+                )
+                logger.info(f"Creating task tree from {len(tasks)} tasks (quick mode)")
+                task_tree = self._build_task_tree_from_tasks(tasks)
+                # Save tasks to database
+                await self._save_tasks_to_database(task_tree, db_session)
+        
+        # Use root task ID if not provided
+        if root_task_id is None:
+            root_task_id = task_tree.task.id
+        
+        # Execute task tree
+        execution_result = await self.execute_task_tree(
+            task_tree=task_tree,
+            root_task_id=root_task_id,
+            use_streaming=use_streaming,
+            streaming_callbacks_context=streaming_callbacks_context,
+            db_session=db_session
+        )
+        
+        return execution_result
+
+    async def _load_existing_task_tree(
+        self,
+        tasks: List[Union[str, Dict[str, Any]]],
+        db_session: Union[Session, AsyncSession]
+    ) -> TaskTreeNode:
+        """
+        Load existing task tree from database
+        
+        Args:
+            tasks: List of task IDs (strings) or task dictionaries with 'id' field
+            db_session: Database session
+            
+        Returns:
+            Root TaskTreeNode
+        """
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        # Extract task IDs
+        task_ids = []
+        for task in tasks:
+            if isinstance(task, str):
+                task_ids.append(task)
+            elif isinstance(task, dict):
+                task_id = task.get("id")
+                if not task_id:
+                    raise ValueError("Task dictionary must have 'id' field when create_if_not_exists=False")
+                task_ids.append(task_id)
+            else:
+                raise ValueError(f"Invalid task format: {task}")
+        
+        if not task_ids:
+            raise ValueError("No valid task IDs provided")
+        
+        # Load tasks from database
+        task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+        loaded_tasks = []
+        for task_id in task_ids:
+            task = await task_repository.get_task_by_id(task_id)
+            if not task:
+                raise ValueError(f"Task {task_id} not found in database")
+            loaded_tasks.append(task)
+        
+        # Find root task (no parent_id)
+        root_task = None
+        for task in loaded_tasks:
+            if not task.parent_id:
+                root_task = task
+                break
+        
+        if not root_task:
+            raise ValueError("No root task found (task without parent_id)")
+        
+        # Build task tree recursively
+        def build_node(task: TaskModel) -> TaskTreeNode:
+            """Recursively build tree node"""
+            node = TaskTreeNode(task)
+            # Find children
+            for child_task in loaded_tasks:
+                if child_task.parent_id == task.id:
+                    child_node = build_node(child_task)
+                    node.add_child(child_node)
+            return node
+        
+        root_node = build_node(root_task)
+        logger.info(f"Loaded existing task tree: root {root_task.id} with {len(root_node.children)} direct children")
+        
+        return root_node
+

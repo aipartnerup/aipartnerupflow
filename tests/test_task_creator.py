@@ -511,7 +511,7 @@ class TestTaskCreator:
     
     @pytest.mark.asyncio
     async def test_dependencies_use_actual_task_ids(self, sync_db_session):
-        """Test that dependencies use actual task ids, not user-provided ids"""
+        """Test that dependencies use actual task ids (user-provided or system-generated)"""
         creator = TaskCreator(sync_db_session)
         
         tasks = [
@@ -531,13 +531,15 @@ class TestTaskCreator:
         
         task_tree = await creator.create_task_tree_from_array(tasks)
         
-        # Dependencies should use actual task id (system-generated), not user-provided id
+        # Dependencies should use actual task id (user-provided id if provided, otherwise system-generated)
         child_task = task_tree.children[0].task
         assert child_task.dependencies is not None
         assert len(child_task.dependencies) == 1
         
-        # The dependency id should be the actual task id (UUID), not "user_id_1"
+        # The dependency id should be the actual task id
+        # If user provided id, use it; otherwise use system-generated UUID
         actual_dep_id = child_task.dependencies[0]["id"]
         assert actual_dep_id == task_tree.task.id  # Actual task id
-        assert actual_dep_id != "user_id_1"  # Not user-provided id
+        # Since user provided id="user_id_1", the actual task id is "user_id_1"
+        assert actual_dep_id == "user_id_1"  # User-provided id becomes the actual task id
 

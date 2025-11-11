@@ -17,6 +17,10 @@ from aipartnerupflow.core.config.registry import (
     get_pre_hooks,
     get_post_hooks,
     clear_config,
+    set_use_task_creator,
+    get_use_task_creator,
+    set_require_existing_tasks,
+    get_require_existing_tasks,
 )
 
 __all__ = [
@@ -28,5 +32,9 @@ __all__ = [
     "get_pre_hooks",
     "get_post_hooks",
     "clear_config",
+    "set_use_task_creator",
+    "get_use_task_creator",
+    "set_require_existing_tasks",
+    "get_require_existing_tasks",
 ]
 
