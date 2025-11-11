@@ -42,7 +42,6 @@ class BatchManager:
     tags: list[str] = []
     examples: list[str] = []
     works: Dict[str, Any] = {}
-    llm: str = ""
     
     def __init__(self, **kwargs: Any):
         """Initialize BatchManager"""
@@ -66,8 +65,6 @@ class BatchManager:
             self.examples = kwargs["examples"]
         if "works" in kwargs:
             self.works = kwargs["works"]
-        if "llm" in kwargs:
-            self.llm = kwargs["llm"]
         if "inputs" in kwargs:
             self.inputs = kwargs["inputs"]
         if "storage" in kwargs:
@@ -121,18 +118,22 @@ class BatchManager:
                 # Create fresh inputs for each crew
                 fresh_inputs = self.inputs.copy() if self.inputs else {}
                 logger.debug(f"Fresh inputs for {work_name}: {fresh_inputs}")
+
+                if "agents" not in work or "tasks" not in work:
+                    raise ValueError("works must contain agents and tasks")
                 
                 # Import CrewManager here to avoid circular imports
                 from aipartnerupflow.extensions.crewai.crew_manager import CrewManager
                 
-                # Create crew manager instance
+                # Create crew manager instance using works format
+                # Works format: {"work_name": {"agents": {...}, "tasks": {...}}}
+                # Or direct format: {"agents": {...}, "tasks": {...}}
+                # CrewManager now supports both formats
                 _crew_manager = CrewManager(
                     name=work_name,
-                    agents=work.get("agents", []),
-                    tasks=work.get("tasks", []),
+                    works=work,
                     inputs=fresh_inputs,
-                    is_sub_crew=True,
-                    llm=self.llm
+                    is_sub_crew=True
                 )
                 
                 # Set streaming context if available

@@ -15,6 +15,12 @@ from aipartnerupflow.extensions.crewai.types import (
     FlowState,
     CrewState,
 )
+from aipartnerupflow.extensions.crewai.tools import (
+    ToolRegistry,
+    get_tool_registry,
+    register_tool,
+    str_to_callable,
+)
 
 __all__ = [
     "CrewManager",
@@ -24,5 +30,10 @@ __all__ = [
     # Backward compatibility aliases
     "FlowState",
     "CrewState",
+    # Tools
+    "ToolRegistry",
+    "get_tool_registry",
+    "register_tool",
+    "str_to_callable",
 ]
 

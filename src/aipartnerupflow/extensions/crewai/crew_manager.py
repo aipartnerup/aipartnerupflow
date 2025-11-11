@@ -6,14 +6,15 @@ CrewManager implements ExecutableTask interface and can be used:
 2. In Batch: As part of a batch operation (multiple crews executed atomically)
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from pydantic import BaseModel
-from crewai import Crew as CrewAI
+from crewai import Crew as CrewAI, LLM
 from crewai.agent import Agent
 from crewai.task import Task
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import extension_register
 from aipartnerupflow.core.utils.logger import get_logger
+from aipartnerupflow.extensions.crewai.tools import str_to_callable
 
 logger = get_logger(__name__)
 
@@ -49,11 +50,9 @@ class CrewManager(BaseTask):
     def __init__(
         self,
         name: str = "",
-        agents: Optional[List[Dict[str, Any]]] = None,
-        tasks: Optional[List[Dict[str, Any]]] = None,
+        works: Optional[Dict[str, Any]] = None,
         inputs: Optional[Dict[str, Any]] = None,
         is_sub_crew: bool = False,
-        llm: Optional[str] = None,
         **kwargs: Any
     ):
         """
@@ -61,11 +60,11 @@ class CrewManager(BaseTask):
         
         Args:
             name: Crew name
-            agents: List of agent configurations
-            tasks: List of task configurations
+            works: Dictionary of works (required, matches aisee_agents format).
+                   Format: {"agents": {agent_name: agent_config}, "tasks": {task_name: task_config}}
+                   Or: {"work_name": {"agents": {...}, "tasks": {...}}} (for batch compatibility)
             inputs: Input parameters
             is_sub_crew: Whether this is a sub-crew in a batch
-            llm: LLM provider configuration
             **kwargs: Additional configuration
         """
         # Initialize BaseTask first
@@ -76,36 +75,168 @@ class CrewManager(BaseTask):
             self.name = name
         self.name = self.name or self.id
         
-        self.agents_config = agents or []
-        self.tasks_config = tasks or []
+        # Initialize agent and task storage (dict format, like aisee_agents)
+        self.agents: Dict[str, Agent] = {}
+        self.tasks: Dict[str, Task] = {}
+        self.task_config: Dict[str, Any] = {}
+        
         self.is_sub_crew = is_sub_crew
-        self.llm = llm
+        self.llm: Optional[str] = None
+        
+        # Process works parameter (required)
+        if not works:
+            raise ValueError("works parameter is required")
+        
+        if not isinstance(works, dict):
+            raise ValueError("works must be a dictionary")
+
+        if "agents" not in works or "tasks" not in works:
+            raise ValueError("works must contain agents and tasks")
+
+        
+        # Create agents and tasks from works
+        self.create_agents(works["agents"])
+        self.create_tasks(works["tasks"])
         
         # Initialize CrewAI crew
         self.crew = None
         self._initialize_crew()
     
+    def create_agents(self, agents: Optional[Dict[str, Any]] = None) -> Dict[str, Agent]:
+        """
+        Create agents from configuration (dict format, like aisee_agents)
+        
+        Args:
+            agents: Dictionary of agent configurations {agent_name: agent_config}
+            
+        Returns:
+            Dictionary of created agents
+        """
+        if not agents:
+            return self.agents
+        
+        for agent_name, agent_config in agents.items():
+            self.create_agent(agent_name, agent_config)
+        
+        return self.agents
+    
+    def create_agent(self, agent_name: str, agent_config: Dict[str, Any]) -> Agent:
+        """
+        Create agent from configuration
+        
+        Args:
+            agent_name: Name of the agent
+            agent_config: Dictionary of agent configuration
+            
+        Returns:
+            Created Agent instance
+        """
+        try:
+            logger.info(f"Creating agent: {agent_name}")
+            
+            # Create a copy of agent_config for processing
+            processed_config = agent_config.copy()
+            
+            # Process LLM: if llm is a string, convert to LLM object
+            llm_name = processed_config.get("llm")
+            if llm_name and isinstance(llm_name, str):
+                llm = LLM(model=llm_name)
+                logger.info(f"Creating agent {agent_name} with LLM: {llm_name}")
+                processed_config["llm"] = llm
+            elif llm_name:
+                # If llm is already an object, use it directly
+                processed_config["llm"] = llm_name
+            
+            # Process tools: convert string tool names to callable objects
+            if "tools" in processed_config:
+                tools = processed_config.get("tools", [])
+                if tools:
+                    processed_config["tools"] = [str_to_callable(tool) for tool in tools]
+            
+            agent = Agent(**processed_config)
+            self.agents[agent_name] = agent
+            return agent
+            
+        except Exception as e:
+            logger.error(f"Failed to create agent {agent_name}: {str(e)}")
+            raise
+    
+    def create_tasks(self, tasks: Optional[Dict[str, Any]] = None) -> Dict[str, Task]:
+        """
+        Create tasks from configuration (dict format, like aisee_agents)
+        
+        Args:
+            tasks: Dictionary of task configurations {task_name: task_config}
+            
+        Returns:
+            Dictionary of created tasks
+        """
+        if not tasks:
+            return self.tasks
+        
+        for task_name, task_config in tasks.items():
+            self.create_task(task_name, task_config)
+        
+        return self.tasks
+    
+    def create_task(self, task_name: str, task_config: Dict[str, Any]) -> Task:
+        """
+        Create task from configuration
+        
+        Args:
+            task_name: Name of the task
+            task_config: Dictionary of task configuration
+            
+        Returns:
+            Created Task instance
+        """
+        try:
+            logger.info(f"Creating task: {task_name}")
+            
+            # Store task config for reference
+            self.task_config[task_name] = task_config
+            
+            # Create a copy of task_config for processing
+            processed_config = task_config.copy()
+            
+            # Process agent reference: if agent is a string, find the agent by name
+            agent_name = processed_config.get("agent")
+            if agent_name:
+                if isinstance(agent_name, str):
+                    if agent_name not in self.agents:
+                        raise ValueError(f"Agent '{agent_name}' not found for task '{task_name}'")
+                    processed_config["agent"] = self.agents[agent_name]
+                # If agent is already an Agent object, use it directly
+            else:
+                # Set agent to None if empty string or not provided
+                processed_config["agent"] = None
+            
+            task = Task(**processed_config)
+            self.tasks[task_name] = task
+            return task
+            
+        except Exception as e:
+            logger.error(f"Failed to create task {task_name}: {str(e)}")
+            raise
+    
     def _initialize_crew(self) -> None:
         """Initialize CrewAI crew instance"""
-        # Convert agent configs to Agent instances
-        agents = []
-        for agent_config in self.agents_config:
-            agent = Agent(**agent_config)
-            agents.append(agent)
+        if not self.agents:
+            raise ValueError("No agents created")
         
-        # Convert task configs to Task instances
-        tasks = []
-        for task_config in self.tasks_config:
-            task = Task(**task_config)
-            tasks.append(task)
+        if not self.tasks:
+            raise ValueError("No tasks created")
         
         # Create CrewAI crew
         crew_kwargs = {
-            "agents": agents,
-            "tasks": tasks,
+            "agents": list(self.agents.values()),
+            "tasks": list(self.tasks.values()),
         }
         
-        if self.llm:
+        # Process crew-level LLM if provided
+        if self.llm and isinstance(self.llm, str):
+            crew_kwargs["llm"] = LLM(model=self.llm)
+        elif self.llm:
             crew_kwargs["llm"] = self.llm
         
         self.crew = CrewAI(**crew_kwargs)
