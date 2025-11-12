@@ -143,14 +143,17 @@ def resolve_tool(tool_ref: Any) -> Any:
     """
     # If input is function, class, or instance, return directly
     if isfunction(tool_ref) or isclass(tool_ref) or callable(tool_ref):
+        logger.debug(f"resolve_tool: Direct return (function/class/callable): {type(tool_ref).__name__}")
         return tool_ref
     
     # Check if it's a tool object (has run method or similar)
     if hasattr(tool_ref, 'run') or hasattr(tool_ref, 'execute') or hasattr(tool_ref, 'call'):
+        logger.debug(f"resolve_tool: Direct return (tool object with run/execute/call): {type(tool_ref).__name__}")
         return tool_ref
     
     # Check if it's any other object - return it as is
     if hasattr(tool_ref, '__dict__') or hasattr(tool_ref, '__slots__'):
+        logger.debug(f"resolve_tool: Direct return (object with __dict__/__slots__): {type(tool_ref).__name__}")
         return tool_ref
     
     # If input is string, parse to callable object
@@ -180,10 +183,13 @@ def resolve_tool(tool_ref: Any) -> Any:
         
         # Get function/class object
         try:
+            logger.debug(f"resolve_tool: Resolving string tool reference '{tool_ref}' (extracted name: '{func_name}')")
+            
             # Method 1: Try to get from tool registry first
             registry = get_tool_registry()
             func = registry.get(func_name)
             if func is not None:
+                logger.info(f"resolve_tool: Method 1 (registry) - Found '{func_name}' in tool registry")
                 # Parse positional arguments
                 args = []
                 for arg in expr.args:
@@ -200,8 +206,11 @@ def resolve_tool(tool_ref: Any) -> Any:
                 if not args and not kwargs:
                     # For tool classes, instantiate them
                     if hasattr(func, '__bases__') and any('BaseTool' in str(base) for base in func.__bases__):
+                        logger.debug(f"resolve_tool: Instantiating tool class '{func_name}' from registry")
                         return func()
+                    logger.debug(f"resolve_tool: Returning tool class/function '{func_name}' from registry")
                     return func
+                logger.debug(f"resolve_tool: Calling '{func_name}' from registry with args={args}, kwargs={kwargs}")
                 return func(*args, **kwargs)
             
             # Method 2: Try to get from crewai_tools (most common case)
@@ -209,6 +218,7 @@ def resolve_tool(tool_ref: Any) -> Any:
                 import crewai_tools
                 func = getattr(crewai_tools, func_name, None)
                 if func is not None:
+                    logger.info(f"resolve_tool: Method 2 (crewai_tools) - Found '{func_name}' in crewai_tools")
                     # Parse positional arguments
                     args = []
                     for arg in expr.args:
@@ -222,23 +232,31 @@ def resolve_tool(tool_ref: Any) -> Any:
                         kwargs[key] = value
                     
                     # Return tool instance directly
+                    logger.debug(f"resolve_tool: Calling '{func_name}' from crewai_tools with args={args}, kwargs={kwargs}")
                     return func(*args, **kwargs)
             except ImportError:
+                logger.debug(f"resolve_tool: Method 2 (crewai_tools) - crewai_tools not available")
                 pass
             
             # Method 3: Try to get from current module globals
             # This requires the caller to have the function in their scope
+            logger.debug(f"resolve_tool: Method 3 (globals) - Searching for '{func_name}' in calling frame globals")
             import inspect
             frame = inspect.currentframe()
+            frame_depth = 0
             while frame:
+                frame_depth += 1
                 if func_name in frame.f_globals:
                     func = frame.f_globals[func_name]
+                    logger.info(f"resolve_tool: Method 3 (globals) - Found '{func_name}' in frame {frame_depth} globals")
                     
                     # If no arguments, return the function object itself
                     if not expr.args and not expr.keywords:
                         # For tool classes, instantiate them
                         if hasattr(func, '__bases__') and any('BaseTool' in str(base) for base in func.__bases__):
+                            logger.debug(f"resolve_tool: Instantiating tool class '{func_name}' from globals")
                             return func()
+                        logger.debug(f"resolve_tool: Returning tool class/function '{func_name}' from globals")
                         return func
                     
                     # If there are arguments, return the function call result
@@ -255,6 +273,7 @@ def resolve_tool(tool_ref: Any) -> Any:
                         kwargs[key] = value
                     
                     # Return tool instance directly
+                    logger.debug(f"resolve_tool: Calling '{func_name}' from globals with args={args}, kwargs={kwargs}")
                     return func(*args, **kwargs)
                 frame = frame.f_back
             

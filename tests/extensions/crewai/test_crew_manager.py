@@ -455,3 +455,107 @@ class TestCrewManager:
             if "network" not in result.get("error", "").lower() and "timeout" not in result.get("error", "").lower():
                 raise AssertionError(f"Unexpected error: {result.get('error')}")
     
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        not os.getenv("OPENAI_API_KEY"),
+        reason="OPENAI_API_KEY is not set - skipping integration test"
+    )
+    async def test_custom_tool_with_crew_tool_decorator(self):
+        """Test CrewManager with a custom tool registered using @crew_tool decorator"""
+        # Check if OpenAI API key is available
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            pytest.skip("OPENAI_API_KEY is not set")
+        
+        try:
+            from aipartnerupflow.extensions.crewai import crew_tool, get_tool_registry
+            from crewai.tools.base_tool import BaseTool
+            from pydantic import BaseModel, Field
+            from typing import Type
+        except ImportError:
+            pytest.skip("CrewAI tools module not available")
+        
+        # Define a custom tool with @crew_tool decorator
+        class TextProcessorInputSchema(BaseModel):
+            text: str = Field(..., description="The text to process")
+            operation: str = Field(default="uppercase", description="Operation to perform: uppercase, lowercase, reverse, or word_count")
+        
+        @crew_tool()
+        class TextProcessorTool(BaseTool):
+            """A custom tool for text processing operations"""
+            name: str = "Text Processor"
+            description: str = "Process text with various operations: uppercase, lowercase, reverse, or word_count"
+            args_schema: Type[BaseModel] = TextProcessorInputSchema
+            
+            def _run(self, text: str, operation: str = "uppercase") -> str:
+                """Process text based on the operation"""
+                if operation == "uppercase":
+                    return text.upper()
+                elif operation == "lowercase":
+                    return text.lower()
+                elif operation == "reverse":
+                    return text[::-1]
+                elif operation == "word_count":
+                    return str(len(text.split()))
+                else:
+                    return f"Unknown operation: {operation}"
+        
+        # Verify tool is registered
+        registry = get_tool_registry()
+        assert "TextProcessorTool" in registry.list_tools(), "TextProcessorTool should be registered"
+        
+        # Create a crew that uses the custom TextProcessorTool
+        crew_manager = CrewManager(
+            name="Text Processor Crew",
+            works={
+                "agents": {
+                    "text_processor": {
+                        "role": "Text Processing Assistant",
+                        "goal": "Process and analyze text using various operations",
+                        "backstory": "You are an expert text processor who can perform various text operations",
+                        "verbose": False,
+                        "allow_delegation": False,
+                        "llm": "openai/gpt-3.5-turbo",  # Use cheaper model for testing
+                        "tools": ["TextProcessorTool()"]  # Use the custom tool via string reference
+                    }
+                },
+                "tasks": {
+                    "process_text": {
+                        "description": "Use the TextProcessorTool to process the text 'Hello World' with the 'uppercase' operation, then use 'word_count' operation on the result. Provide a summary of what operations were performed.",
+                        "expected_output": "A summary of the text processing operations performed",
+                        "agent": "text_processor"
+                    }
+                }
+            }
+        )
+        
+        # Execute crew
+        result = await crew_manager.execute()
+        print("=== result: ===")
+        import json
+        print(json.dumps(result, indent=2, default=str))
+        
+        # Verify result structure
+        assert result["status"] in ["success", "failed"]
+        
+        if result["status"] == "success":
+            # Verify success result
+            assert "result" in result
+            assert result["result"] is not None
+            
+            # The result should mention the text processing operations
+            result_str = str(result["result"]).lower()
+            # Should mention uppercase, word count, or text processing related content
+            assert any(keyword in result_str for keyword in ["uppercase", "word", "count", "hello", "world", "text", "process"])
+            
+            # Verify token usage is present (if available)
+            if "token_usage" in result:
+                token_usage = result["token_usage"]
+                assert "total_tokens" in token_usage or "status" in token_usage
+        else:
+            # If failed, verify error message
+            assert "error" in result
+            # Log the error for debugging
+            print(f"Text processing failed: {result.get('error')}")
+            raise AssertionError(f"Unexpected error: {result.get('error')}")
+    
