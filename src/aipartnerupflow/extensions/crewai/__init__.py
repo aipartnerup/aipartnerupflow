@@ -15,11 +15,12 @@ from aipartnerupflow.extensions.crewai.types import (
     FlowState,
     CrewState,
 )
+# Import tools module - this will auto-import all tools via tools.py
 from aipartnerupflow.extensions.crewai.tools import (
     ToolRegistry,
     get_tool_registry,
     register_tool,
-    str_to_callable,
+    resolve_tool,
 )
 from aipartnerupflow.extensions.crewai.decorators import crew_tool
 
@@ -36,6 +37,6 @@ __all__ = [
     "get_tool_registry",
     "register_tool",
     "crew_tool",
-    "str_to_callable",
+    "resolve_tool",
 ]
 

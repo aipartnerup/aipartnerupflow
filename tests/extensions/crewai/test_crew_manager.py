@@ -10,14 +10,14 @@ from unittest.mock import Mock, patch, MagicMock
 
 # Try to import CrewManager, skip tests if not available
 try:
-    from aipartnerupflow.extensions.crewai import CrewManager, register_tool, str_to_callable
+    from aipartnerupflow.extensions.crewai import CrewManager, register_tool, resolve_tool
     from crewai import LLM, Agent
 except ImportError:
     CrewManager = None
     LLM = None
     Agent = None
     register_tool = None
-    str_to_callable = None
+    resolve_tool = None
     pytestmark = pytest.mark.skip("crewai module not available")
 
 
@@ -189,16 +189,16 @@ class TestCrewManager:
                 assert "llm" in call_args.kwargs
                 assert call_args.kwargs["llm"] == mock_llm_instance
     
-    @pytest.mark.skipif(CrewManager is None or str_to_callable is None, reason="CrewManager or str_to_callable not available")
+    @pytest.mark.skipif(CrewManager is None or resolve_tool is None, reason="CrewManager or resolve_tool not available")
     def test_tools_string_conversion(self):
         """Test that string tool names are converted to callable objects"""
         # Create mock tool
         mock_tool = Mock()
         mock_tool.run = Mock(return_value="tool result")
         
-        # Mock str_to_callable to return our mock tool
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.str_to_callable') as mock_str_to_callable:
-            mock_str_to_callable.return_value = mock_tool
+        # Mock resolve_tool to return our mock tool
+        with patch('aipartnerupflow.extensions.crewai.crew_manager.resolve_tool') as mock_resolve_tool:
+            mock_resolve_tool.return_value = mock_tool
             
             # Mock Agent, Task and CrewAI
             mock_agent = Mock()
@@ -234,10 +234,10 @@ class TestCrewManager:
                     }
                 )
                 
-                # Verify str_to_callable was called for each tool
-                assert mock_str_to_callable.call_count == 2
-                mock_str_to_callable.assert_any_call("SerperDevTool()")
-                mock_str_to_callable.assert_any_call("ScrapeWebsiteTool()")
+                # Verify resolve_tool was called for each tool
+                assert mock_resolve_tool.call_count == 2
+                mock_resolve_tool.assert_any_call("SerperDevTool()")
+                mock_resolve_tool.assert_any_call("ScrapeWebsiteTool()")
                 
                 # Verify Agent was called with converted tools
                 call_args = mock_agent_class.call_args
@@ -247,7 +247,7 @@ class TestCrewManager:
                 assert call_args.kwargs["tools"][0] == mock_tool
                 assert call_args.kwargs["tools"][1] == mock_tool
     
-    @pytest.mark.skipif(CrewManager is None or LLM is None or str_to_callable is None, 
+    @pytest.mark.skipif(CrewManager is None or LLM is None or resolve_tool is None, 
                         reason="Required modules not available")
     def test_llm_and_tools_together(self):
         """Test that both LLM and tools string conversion work together"""
@@ -260,9 +260,9 @@ class TestCrewManager:
         mock_tool.run = Mock(return_value="tool result")
         
         with patch('aipartnerupflow.extensions.crewai.crew_manager.LLM') as mock_llm_class, \
-             patch('aipartnerupflow.extensions.crewai.crew_manager.str_to_callable') as mock_str_to_callable:
+             patch('aipartnerupflow.extensions.crewai.crew_manager.resolve_tool') as mock_resolve_tool:
             mock_llm_class.return_value = mock_llm_instance
-            mock_str_to_callable.return_value = mock_tool
+            mock_resolve_tool.return_value = mock_tool
             
             # Mock Agent, Task and CrewAI
             mock_agent = Mock()
@@ -303,7 +303,7 @@ class TestCrewManager:
                 mock_llm_class.assert_called_with(model="gpt-4")
                 
                 # Verify tools conversion
-                mock_str_to_callable.assert_called_with("SerperDevTool()")
+                mock_resolve_tool.assert_called_with("SerperDevTool()")
                 
                 # Verify Agent was called with both LLM and tools
                 call_args = mock_agent_class.call_args
@@ -375,4 +375,83 @@ class TestCrewManager:
             assert "error" in result
             # Log the error for debugging
             print(f"Crew execution failed: {result.get('error')}")
+    
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        not os.getenv("OPENAI_API_KEY"),
+        reason="OPENAI_API_KEY is not set - skipping integration test"
+    )
+    async def test_limited_scrape_website_tool_integration(self):
+        """Test CrewManager with LimitedScrapeWebsiteTool using real OpenAI API"""
+        # Check if OpenAI API key is available
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            pytest.skip("OPENAI_API_KEY is not set")
+        
+        # Verify tool is registered (tools are auto-imported when importing crewai module)
+        try:
+            from aipartnerupflow.extensions.crewai import get_tool_registry
+            registry = get_tool_registry()
+            # Verify tool is registered
+            if "LimitedScrapeWebsiteTool" not in registry.list_tools():
+                pytest.skip("LimitedScrapeWebsiteTool not registered (may be missing dependencies)")
+        except ImportError:
+            pytest.skip("CrewAI tools module not available")
+        
+        # Create a crew that uses LimitedScrapeWebsiteTool to scrape a website
+        crew_manager = CrewManager(
+            name="Website Scraper Crew",
+            works={
+                "agents": {
+                    "web_analyzer": {
+                        "role": "Web Content Analyzer",
+                        "goal": "Analyze website content and provide a summary",
+                        "backstory": "You are an expert web content analyzer who can extract and summarize information from websites",
+                        "verbose": False,
+                        "allow_delegation": False,
+                        "llm": "openai/gpt-3.5-turbo",  # Use cheaper model for testing
+                        "tools": ["LimitedScrapeWebsiteTool()"]  # Use the tool via string reference
+                    }
+                },
+                "tasks": {
+                    "scrape_and_summarize": {
+                        "description": "Use the LimitedScrapeWebsiteTool to scrape https://www.spacex.com and provide a brief summary (2-3 sentences) of what the website is about. Focus on the main purpose and key information.",
+                        "expected_output": "A brief 2-3 sentence summary of the SpaceX website content",
+                        "agent": "web_analyzer"
+                    }
+                }
+            }
+        )
+        
+        # Execute crew
+        result = await crew_manager.execute()
+        print("=== result: ===")
+        import json
+        print(json.dumps(result, indent=2, default=str))
+        
+        # Verify result structure
+        assert result["status"] in ["success", "failed"]
+        
+        if result["status"] == "success":
+            # Verify success result
+            assert "result" in result
+            assert result["result"] is not None
+            
+            # The result should contain information about SpaceX
+            result_str = str(result["result"]).lower()
+            # Should mention spacex or space-related content
+            assert "spacex" in result_str or "space" in result_str or "rocket" in result_str or "mars" in result_str
+            
+            # Verify token usage is present (if available)
+            if "token_usage" in result:
+                token_usage = result["token_usage"]
+                assert "total_tokens" in token_usage or "status" in token_usage
+        else:
+            # If failed, verify error message
+            assert "error" in result
+            # Log the error for debugging
+            print(f"Website scraping failed: {result.get('error')}")
+            # Don't fail the test if it's a network error (website might be down)
+            if "network" not in result.get("error", "").lower() and "timeout" not in result.get("error", "").lower():
+                raise AssertionError(f"Unexpected error: {result.get('error')}")
     

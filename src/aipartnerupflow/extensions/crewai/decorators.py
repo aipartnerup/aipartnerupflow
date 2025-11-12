@@ -1,5 +1,5 @@
 from typing import Any, Optional
-from aipartnerupflow.extensions.crewai.tools import register_tool
+from aipartnerupflow.extensions.crewai.tool_registry import register_tool
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)

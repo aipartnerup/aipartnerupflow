@@ -1,7 +1,7 @@
 """
 Tools module for CrewAI extensions
 
-Provides str_to_callable function and tool registry for converting string tool names
+Provides resolve_tool function and tool registry for converting string tool references
 to callable tool objects.
 """
 
@@ -98,7 +98,7 @@ def register_tool(name: str, tool: Any, override: bool = False) -> None:
         override: If True, allow overriding existing registration
     
     Example:
-        from aipartnerupflow.extensions.crewai.tools import register_tool
+        from aipartnerupflow.extensions.crewai.tool_registry import register_tool
         from crewai_tools import SerperDevTool
         
         register_tool("serper", SerperDevTool)
@@ -107,12 +107,12 @@ def register_tool(name: str, tool: Any, override: bool = False) -> None:
     _registry.register(name, tool, override=override)
 
 
-def str_to_callable(callable_obj: Any) -> Any:
+def resolve_tool(tool_ref: Any) -> Any:
     """
-    Convert string tool reference to callable tool object
+    Resolve tool reference to callable tool object
     
-    Handles conversion of:
-    - String tool names (e.g., "SerperDevTool()") to tool instances
+    Handles resolution of:
+    - String tool references (e.g., "SerperDevTool()") to tool instances
     - Already callable objects (functions, classes, instances) - returns as-is
     - Tool objects (has run/execute/call methods) - returns as-is
     
@@ -120,7 +120,7 @@ def str_to_callable(callable_obj: Any) -> Any:
     then searches in the calling frame's globals.
     
     Args:
-        callable_obj: String tool reference, function, class, or tool instance
+        tool_ref: Tool reference - can be string, function, class, or tool instance
         
     Returns:
         Callable tool object
@@ -133,42 +133,42 @@ def str_to_callable(callable_obj: Any) -> Any:
     Example:
         # From registry
         register_tool("my_tool", MyTool)
-        tool = str_to_callable("my_tool()")
+        tool = resolve_tool("my_tool()")
         
         # From crewai_tools
-        tool = str_to_callable("SerperDevTool()")
+        tool = resolve_tool("SerperDevTool()")
         
         # Already a tool object
-        tool = str_to_callable(SerperDevTool())
+        tool = resolve_tool(SerperDevTool())
     """
     # If input is function, class, or instance, return directly
-    if isfunction(callable_obj) or isclass(callable_obj) or callable(callable_obj):
-        return callable_obj
+    if isfunction(tool_ref) or isclass(tool_ref) or callable(tool_ref):
+        return tool_ref
     
     # Check if it's a tool object (has run method or similar)
-    if hasattr(callable_obj, 'run') or hasattr(callable_obj, 'execute') or hasattr(callable_obj, 'call'):
-        return callable_obj
+    if hasattr(tool_ref, 'run') or hasattr(tool_ref, 'execute') or hasattr(tool_ref, 'call'):
+        return tool_ref
     
     # Check if it's any other object - return it as is
-    if hasattr(callable_obj, '__dict__') or hasattr(callable_obj, '__slots__'):
-        return callable_obj
+    if hasattr(tool_ref, '__dict__') or hasattr(tool_ref, '__slots__'):
+        return tool_ref
     
     # If input is string, parse to callable object
-    if isinstance(callable_obj, str):
+    if isinstance(tool_ref, str):
         # Auto-add () if it's a simple class name (not a function call format)
-        if '(' not in callable_obj.strip():
-            callable_obj = f"{callable_obj.strip()}()"
+        if '(' not in tool_ref.strip():
+            tool_ref = f"{tool_ref.strip()}()"
         
         # Parse string to AST
         try:
-            tree = ast.parse(callable_obj, mode='eval')
+            tree = ast.parse(tool_ref, mode='eval')
             expr = tree.body
         except SyntaxError as e:
-            raise ValueError(f"Invalid tool string syntax: {callable_obj}. Error: {e}")
+            raise ValueError(f"Invalid tool string syntax: {tool_ref}. Error: {e}")
         
         # Check if it is function call expression
         if not isinstance(expr, ast.Call):
-            raise ValueError(f"Invalid function call: {callable_obj}")
+            raise ValueError(f"Invalid function call: {tool_ref}")
         
         # Extract function name
         if hasattr(expr.func, 'id') and getattr(expr.func, 'id', None):
@@ -268,7 +268,7 @@ def str_to_callable(callable_obj: Any) -> Any:
     
     # Other types raise exception
     raise TypeError(
-        f"Unsupported type: {type(callable_obj)}, "
+        f"Unsupported type: {type(tool_ref)}, "
         f"only support string, function, class, and object instances"
     )
 
@@ -277,6 +277,7 @@ __all__ = [
     "ToolRegistry",
     "get_tool_registry",
     "register_tool",
-    "str_to_callable"
+    "resolve_tool",
 ]
+
 

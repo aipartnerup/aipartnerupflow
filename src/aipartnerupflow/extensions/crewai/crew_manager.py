@@ -14,7 +14,7 @@ from crewai.task import Task
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import extension_register
 from aipartnerupflow.core.utils.logger import get_logger
-from aipartnerupflow.extensions.crewai.tools import str_to_callable
+from aipartnerupflow.extensions.crewai.tool_registry import resolve_tool
 
 logger = get_logger(__name__)
 
@@ -151,7 +151,7 @@ class CrewManager(BaseTask):
             if "tools" in processed_config:
                 tools = processed_config.get("tools", [])
                 if tools:
-                    processed_config["tools"] = [str_to_callable(tool) for tool in tools]
+                    processed_config["tools"] = [resolve_tool(tool) for tool in tools]
             
             agent = Agent(**processed_config)
             self.agents[agent_name] = agent
