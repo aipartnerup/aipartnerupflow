@@ -21,6 +21,7 @@ from aipartnerupflow.extensions.crewai.tools import (
     register_tool,
     str_to_callable,
 )
+from aipartnerupflow.extensions.crewai.decorators import crew_tool
 
 __all__ = [
     "CrewManager",
@@ -34,6 +35,7 @@ __all__ = [
     "ToolRegistry",
     "get_tool_registry",
     "register_tool",
+    "crew_tool",
     "str_to_callable",
 ]
 
