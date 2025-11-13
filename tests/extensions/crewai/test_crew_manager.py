@@ -31,7 +31,8 @@ from unittest.mock import Mock, patch, MagicMock
 
 # Try to import CrewManager, skip tests if not available
 try:
-    from aipartnerupflow.extensions.crewai import CrewManager, register_tool, resolve_tool
+    from aipartnerupflow.extensions.crewai import CrewManager
+    from aipartnerupflow.core.tools import register_tool, resolve_tool
     from crewai import LLM, Agent
 except ImportError:
     CrewManager = None
@@ -402,189 +403,6 @@ class TestCrewManager:
         not os.getenv("OPENAI_API_KEY"),
         reason="OPENAI_API_KEY is not set - skipping integration test"
     )
-    async def test_limited_scrape_website_tool_integration(self):
-        """Test CrewManager with LimitedScrapeWebsiteTool using real OpenAI API"""
-        # Check if OpenAI API key is available
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if not openai_key:
-            pytest.skip("OPENAI_API_KEY is not set")
-        
-        # Verify tool is registered (tools are auto-imported when importing crewai module)
-        try:
-            from aipartnerupflow.extensions.crewai import get_tool_registry
-            registry = get_tool_registry()
-            # Verify tool is registered
-            if "LimitedScrapeWebsiteTool" not in registry.list_tools():
-                pytest.skip("LimitedScrapeWebsiteTool not registered (may be missing dependencies)")
-        except ImportError:
-            pytest.skip("CrewAI tools module not available")
-        
-        # Create a crew that uses LimitedScrapeWebsiteTool to scrape a website
-        crew_manager = CrewManager(
-            name="Website Scraper Crew",
-            works={
-                "agents": {
-                    "web_analyzer": {
-                        "role": "Web Content Analyzer",
-                        "goal": "Analyze website content and provide a summary",
-                        "backstory": "You are an expert web content analyzer who can extract and summarize information from websites",
-                        "verbose": False,
-                        "allow_delegation": False,
-                        "llm": "openai/gpt-3.5-turbo",  # Use cheaper model for testing
-                        "tools": ["LimitedScrapeWebsiteTool()"]  # Use the tool via string reference
-                    }
-                },
-                "tasks": {
-                    "scrape_and_summarize": {
-                        "description": "Use the LimitedScrapeWebsiteTool to scrape https://www.spacex.com and provide a brief summary (2-3 sentences) of what the website is about. Focus on the main purpose and key information.",
-                        "expected_output": "A brief 2-3 sentence summary of the SpaceX website content",
-                        "agent": "web_analyzer"
-                    }
-                }
-            }
-        )
-        
-        # Execute crew
-        result = await crew_manager.execute()
-        print("=== result: ===")
-        import json
-        print(json.dumps(result, indent=2, default=str))
-        
-        # Verify result structure
-        assert result["status"] in ["success", "failed"]
-        
-        if result["status"] == "success":
-            # Verify success result
-            assert "result" in result
-            assert result["result"] is not None
-            
-            # The result should contain information about SpaceX
-            result_str = str(result["result"]).lower()
-            # Should mention spacex or space-related content
-            assert "spacex" in result_str or "space" in result_str or "rocket" in result_str or "mars" in result_str
-            
-            # Verify token usage is present (if available)
-            if "token_usage" in result:
-                token_usage = result["token_usage"]
-                assert "total_tokens" in token_usage or "status" in token_usage
-        else:
-            # If failed, verify error message
-            assert "error" in result
-            # Log the error for debugging
-            print(f"Website scraping failed: {result.get('error')}")
-            # Don't fail the test if it's a network error (website might be down)
-            if "network" not in result.get("error", "").lower() and "timeout" not in result.get("error", "").lower():
-                raise AssertionError(f"Unexpected error: {result.get('error')}")
-    
-    @pytest.mark.asyncio
-    @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY is not set - skipping integration test"
-    )
-    async def test_custom_tool_with_crew_tool_decorator(self):
-        """Test CrewManager with a custom tool registered using @crew_tool decorator"""
-        # Check if OpenAI API key is available
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if not openai_key:
-            pytest.skip("OPENAI_API_KEY is not set")
-        
-        try:
-            from aipartnerupflow.extensions.crewai import crew_tool, get_tool_registry
-            from crewai.tools.base_tool import BaseTool
-            from pydantic import BaseModel, Field
-            from typing import Type
-        except ImportError:
-            pytest.skip("CrewAI tools module not available")
-        
-        # Define a custom tool with @crew_tool decorator
-        class TextProcessorInputSchema(BaseModel):
-            text: str = Field(..., description="The text to process")
-            operation: str = Field(default="uppercase", description="Operation to perform: uppercase, lowercase, reverse, or word_count")
-        
-        @crew_tool()
-        class TextProcessorTool(BaseTool):
-            """A custom tool for text processing operations"""
-            name: str = "Text Processor"
-            description: str = "Process text with various operations: uppercase, lowercase, reverse, or word_count"
-            args_schema: Type[BaseModel] = TextProcessorInputSchema
-            
-            def _run(self, text: str, operation: str = "uppercase") -> str:
-                """Process text based on the operation"""
-                if operation == "uppercase":
-                    return text.upper()
-                elif operation == "lowercase":
-                    return text.lower()
-                elif operation == "reverse":
-                    return text[::-1]
-                elif operation == "word_count":
-                    return str(len(text.split()))
-                else:
-                    return f"Unknown operation: {operation}"
-        
-        # Verify tool is registered
-        registry = get_tool_registry()
-        assert "TextProcessorTool" in registry.list_tools(), "TextProcessorTool should be registered"
-        
-        # Create a crew that uses the custom TextProcessorTool
-        crew_manager = CrewManager(
-            name="Text Processor Crew",
-            works={
-                "agents": {
-                    "text_processor": {
-                        "role": "Text Processing Assistant",
-                        "goal": "Process and analyze text using various operations",
-                        "backstory": "You are an expert text processor who can perform various text operations",
-                        "verbose": False,
-                        "allow_delegation": False,
-                        "llm": "openai/gpt-3.5-turbo",  # Use cheaper model for testing
-                        "tools": ["TextProcessorTool()"]  # Use the custom tool via string reference
-                    }
-                },
-                "tasks": {
-                    "process_text": {
-                        "description": "Use the TextProcessorTool to process the text 'Hello World' with the 'uppercase' operation, then use 'word_count' operation on the result. Provide a summary of what operations were performed.",
-                        "expected_output": "A summary of the text processing operations performed",
-                        "agent": "text_processor"
-                    }
-                }
-            }
-        )
-        
-        # Execute crew
-        result = await crew_manager.execute()
-        print("=== result: ===")
-        import json
-        print(json.dumps(result, indent=2, default=str))
-        
-        # Verify result structure
-        assert result["status"] in ["success", "failed"]
-        
-        if result["status"] == "success":
-            # Verify success result
-            assert "result" in result
-            assert result["result"] is not None
-            
-            # The result should mention the text processing operations
-            result_str = str(result["result"]).lower()
-            # Should mention uppercase, word count, or text processing related content
-            assert any(keyword in result_str for keyword in ["uppercase", "word", "count", "hello", "world", "text", "process"])
-            
-            # Verify token usage is present (if available)
-            if "token_usage" in result:
-                token_usage = result["token_usage"]
-                assert "total_tokens" in token_usage or "status" in token_usage
-        else:
-            # If failed, verify error message
-            assert "error" in result
-            # Log the error for debugging
-            print(f"Text processing failed: {result.get('error')}")
-            raise AssertionError(f"Unexpected error: {result.get('error')}")
-    
-    @pytest.mark.asyncio
-    @pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY is not set - skipping integration test"
-    )
     async def test_resolve_tool_method_2_crewai_tools(self):
         """
         Test Method 2 (crewai_tools) usage scenario
@@ -606,7 +424,7 @@ class TestCrewManager:
         
         try:
             import crewai_tools
-            from aipartnerupflow.extensions.crewai import resolve_tool, get_tool_registry
+            from aipartnerupflow.core.tools import resolve_tool, get_tool_registry
         except ImportError:
             pytest.skip("crewai_tools or CrewAI module not available")
         
@@ -666,8 +484,7 @@ class TestCrewManager:
             pytest.skip("OPENAI_API_KEY is not set")
         
         try:
-            from aipartnerupflow.extensions.crewai import resolve_tool, get_tool_registry
-            from crewai.tools.base_tool import BaseTool
+            from aipartnerupflow.core.tools import resolve_tool, get_tool_registry, BaseTool
             from pydantic import BaseModel, Field
             from typing import Type
             import inspect

@@ -24,7 +24,7 @@ if src_path not in sys.path:
 # This ensures extensions are registered before tests run
 # Must be imported before other modules that use the registry
 try:
-    from aipartnerupflow.extensions.stdio import StdioExecutor  # noqa: F401
+    from aipartnerupflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401
 except ImportError:
     pass  # Extension not available, tests will handle this
 

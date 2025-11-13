@@ -14,7 +14,7 @@ from crewai.task import Task
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import extension_register
 from aipartnerupflow.core.utils.logger import get_logger
-from aipartnerupflow.extensions.crewai.tool_registry import resolve_tool
+from aipartnerupflow.core.tools import resolve_tool
 
 logger = get_logger(__name__)
 

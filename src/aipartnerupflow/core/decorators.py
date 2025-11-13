@@ -43,6 +43,9 @@ from aipartnerupflow.core.config import (
 # Re-export extension decorator
 from aipartnerupflow.core.extensions.decorators import extension_register
 
+# Re-export tool decorator
+from aipartnerupflow.core.tools.decorators import tool_register
+
 __all__ = [
     # Hook decorators
     "register_pre_hook",
@@ -59,5 +62,7 @@ __all__ = [
     "get_require_existing_tasks",
     # Extension registration
     "extension_register",
+    # Tool registration
+    "tool_register",
 ]
 

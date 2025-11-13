@@ -18,7 +18,8 @@ class TestTaskManager:
     @pytest.mark.asyncio
     async def test_task_manager_initialization_sync(self, sync_db_session):
         """Test TaskManager initialization with sync session"""
-        task_manager = TaskManager(sync_db_session)
+        # Explicitly pass empty hooks to avoid dependency on global config state
+        task_manager = TaskManager(sync_db_session, pre_hooks=[], post_hooks=[])
         assert task_manager.db == sync_db_session
         assert task_manager.is_async is False
         assert task_manager.root_task_id is None
@@ -30,7 +31,8 @@ class TestTaskManager:
     @pytest.mark.asyncio
     async def test_task_manager_initialization_async(self, async_db_session):
         """Test TaskManager initialization with async session"""
-        task_manager = TaskManager(async_db_session)
+        # Explicitly pass empty hooks to avoid dependency on global config state
+        task_manager = TaskManager(async_db_session, pre_hooks=[], post_hooks=[])
         assert task_manager.db == async_db_session
         assert task_manager.is_async is True
         assert task_manager.pre_hooks == []

@@ -52,9 +52,9 @@ def extension_register(
         from aipartnerupflow.core.base import BaseTask
         
         @extension_register()
-        class StdioExecutor(BaseTask):
-            id = "stdio_executor"
-            name = "Stdio Executor"
+        class SystemInfoExecutor(BaseTask):
+            id = "system_info_executor"
+            name = "System Info Executor"
             type = "stdio"
             ...
     """

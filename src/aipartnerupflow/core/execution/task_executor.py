@@ -21,6 +21,18 @@ from aipartnerupflow.core.config import (
 )
 from aipartnerupflow.core.utils.logger import get_logger
 
+# Auto-import extensions to register extensions and tools when TaskExecutor is imported
+# This ensures extensions and tools are available when TaskExecutor is used
+# (extensions/__init__.py auto-imports tools, so tools will be registered automatically)
+try:
+    import aipartnerupflow.extensions  # noqa: F401
+except ImportError:
+    # Extensions may not be installed, that's okay
+    pass
+except Exception:
+    # Other errors (syntax errors, etc.) should not break import
+    pass
+
 logger = get_logger(__name__)
 
 

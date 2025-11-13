@@ -1,34 +1,31 @@
 """
-CrewAI Tools Package
+Tools Extension Package
 
 This package contains individual tool implementations.
 Tools are automatically imported and registered when this package is imported.
 """
 
-# Import core tool functionality from tool_registry module
-from aipartnerupflow.extensions.crewai.tool_registry import (
+# Import core tool functionality from core.tools
+from aipartnerupflow.core.tools import (
+    BaseTool,
     ToolRegistry,
     get_tool_registry,
     register_tool,
     resolve_tool,
+    tool_register,
 )
 
 __all__ = [
+    "BaseTool",
     "ToolRegistry",
     "get_tool_registry",
     "register_tool",
     "resolve_tool",
+    "tool_register",
 ]
 
-# Auto-import all tools from this directory to trigger @crew_tool() decorator registration
-# - Auto-import all tool modules in tools/__init__.py
-# - When importing aipartnerupflow.extensions.crewai.tools
-# - Automatically scan and import all .py files in the tools/ directory
-# - Module import -> Class definition execution -> @crew_tool() decorator execution -> Tool auto-registration
-#
-# This ensures:
-# - Users only need to import aipartnerupflow.extensions.crewai
-# - All tools will be automatically registered without manually importing each tool module
+# Auto-import all tools from this directory to trigger @tool_register() decorator registration
+# This ensures all tools are automatically registered when the tools package is imported
 try:
     import importlib
     import pkgutil
@@ -44,7 +41,7 @@ try:
             # Skip __init__ and __pycache__, and only import modules (not packages)
             if not module_name.startswith("__") and not module_info.ispkg:
                 try:
-                    importlib.import_module(f"aipartnerupflow.extensions.crewai.tools.{module_name}")
+                    importlib.import_module(f"aipartnerupflow.extensions.tools.{module_name}")
                 except ImportError:
                     # Tool may have missing dependencies, skip it silently
                     pass

@@ -1,15 +1,22 @@
+"""
+Tool registration decorator
+
+Provides @tool_register() decorator for automatic tool registration.
+"""
+
 from typing import Any, Optional
-from aipartnerupflow.extensions.crewai.tool_registry import register_tool
+from aipartnerupflow.core.tools.registry import register_tool
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-def crew_tool(name: Optional[str] = None, override: bool = False):
+
+def tool_register(name: Optional[str] = None, override: bool = False):
     """
-    Decorator to automatically register CrewAI tools in the tool registry
+    Decorator to automatically register tools in the tool registry
     
     This decorator can be used on:
-    - BaseTool subclasses (CrewAI tools)
+    - BaseTool subclasses (tools)
     - Functions that should be used as tools
     - Classes that should be instantiated as tools
     
@@ -24,10 +31,9 @@ def crew_tool(name: Optional[str] = None, override: bool = False):
         Decorated class or function
     
     Example:
-        from crewai.tools.base_tool import BaseTool
-        from aipartnerupflow.extensions.crewai.tools import crew_tool
+        from aipartnerupflow.core.tools import BaseTool, tool_register
         
-        @crew_tool()
+        @tool_register()
         class MyCustomTool(BaseTool):
             name: str = "My Custom Tool"
             description: str = "A custom tool for doing something"
@@ -38,7 +44,7 @@ def crew_tool(name: Optional[str] = None, override: bool = False):
         # Tool is automatically registered as "MyCustomTool"
         # Can be used in agent config: tools=["MyCustomTool()"]
         
-        @crew_tool(name="custom_name")
+        @tool_register(name="custom_name")
         class AnotherTool(BaseTool):
             ...
         
@@ -55,16 +61,20 @@ def crew_tool(name: Optional[str] = None, override: bool = False):
         # Register the tool
         try:
             register_tool(tool_name, cls_or_func, override=override)
-            logger.info(f"Auto-registered tool '{tool_name}' using @crew_tool decorator")
+            logger.info(f"Auto-registered tool '{tool_name}' using @tool_register decorator")
         except ValueError as e:
             if not override:
                 logger.warning(f"Tool '{tool_name}' already registered. Use override=True to replace it.")
                 raise
             else:
                 register_tool(tool_name, cls_or_func, override=True)
-                logger.info(f"Overridden tool '{tool_name}' using @crew_tool decorator")
+                logger.info(f"Overridden tool '{tool_name}' using @tool_register decorator")
         
         # Return the original class/function unchanged
         return cls_or_func
     
     return decorator
+
+
+__all__ = ["tool_register"]
+

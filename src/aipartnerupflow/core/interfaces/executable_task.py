@@ -18,7 +18,8 @@ class ExecutableTask(Extension, ABC):
     This interface extends Extension, so all executors are registered extensions.
     Implementations include:
     - CrewManager [crewai]: LLM-based agent crews (via CrewAI) - available in extensions/crewai/
-    - StdioExecutor [stdio]: Process execution via stdio - available in extensions/stdio/
+    - SystemInfoExecutor [stdio]: Safe system information queries - available in extensions/stdio/
+    - CommandExecutor [stdio]: Shell command execution - available in extensions/stdio/
     - Custom tasks: Non-LLM tasks (web scraping, API calls, data processing, etc.)
     
     Note: BatchManager is NOT an ExecutableTask. BatchManager is a container that batches multiple crews

@@ -34,7 +34,7 @@ logger.info("Starting aipartnerupflow service")
 # Auto-discover built-in extensions (optional, extensions register via @extension_register decorator)
 # This ensures extensions are available when TaskManager is used
 try:
-    from aipartnerupflow.extensions.stdio import StdioExecutor  # noqa: F401
+    from aipartnerupflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401
     logger.debug("Discovered stdio extension")
 except ImportError:
     logger.debug("Stdio extension not available (optional)")

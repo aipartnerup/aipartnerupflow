@@ -15,14 +15,17 @@ from aipartnerupflow.extensions.crewai.types import (
     FlowState,
     CrewState,
 )
-# Import tools module - this will auto-import all tools via tools.py
-from aipartnerupflow.extensions.crewai.tools import (
+# Import tools from core.tools (tools framework is now in core)
+from aipartnerupflow.core.tools import (
     ToolRegistry,
     get_tool_registry,
     register_tool,
     resolve_tool,
+    tool_register,
 )
-from aipartnerupflow.extensions.crewai.decorators import crew_tool
+
+# Backward compatibility: alias tool_register as crew_tool
+crew_tool = tool_register
 
 __all__ = [
     "CrewManager",
@@ -32,11 +35,12 @@ __all__ = [
     # Backward compatibility aliases
     "FlowState",
     "CrewState",
-    # Tools
+    # Tools (from core.tools)
     "ToolRegistry",
     "get_tool_registry",
     "register_tool",
-    "crew_tool",
+    "tool_register",
+    "crew_tool",  # Backward compatibility alias
     "resolve_tool",
 ]
 

@@ -36,11 +36,11 @@ class BatchManager:
     initial_state = BatchState
     
     # BatchManager definition properties
-    id: str = ""
-    name: str = ""
-    description: str = ""
+    id: str = "batch_crewai_executor"
+    name: str = "Batch CrewAI Executor"
+    description: str = "Batch execution of multiple crews via CrewAI"
     tags: list[str] = []
-    examples: list[str] = []
+    examples: list[str] = ["Execute multiple crews as a batch"]
     works: Dict[str, Any] = {}
     
     def __init__(self, **kwargs: Any):

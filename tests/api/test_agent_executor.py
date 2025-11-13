@@ -18,13 +18,14 @@ from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.utils.logger import get_logger
 
-# Import StdioExecutor to trigger @extension_register decorator
-# This ensures the executor is registered before tests run
+# Import executors to trigger @extension_register decorator
+# This ensures the executors are registered before tests run
 try:
-    from aipartnerupflow.extensions.stdio import StdioExecutor  # noqa: F401
+    from aipartnerupflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401
 except ImportError:
     # If stdio extension is not available, tests will fail appropriately
-    StdioExecutor = None
+    SystemInfoExecutor = None
+    CommandExecutor = None
 
 logger = get_logger(__name__)
 
@@ -352,7 +353,7 @@ class TestAgentExecutor:
                 ],
                 "schemas": {
                     "type": "stdio",
-                    "method": "aggregate_results"
+                    "method": "aggregate_results"  # Special TaskManager feature, not stdio executor method
                 },
                 "input_data": {}
             },
@@ -366,8 +367,7 @@ class TestAgentExecutor:
                 "has_children": False,
                 "dependencies": [],
                 "schemas": {
-                    "type": "stdio",
-                    "method": "system_info"
+                    "method": "system_info_executor"  # Executor id
                 },
                 "input_data": {
                     "resource": "cpu"
@@ -383,8 +383,7 @@ class TestAgentExecutor:
                 "has_children": False,
                 "dependencies": [],
                 "schemas": {
-                    "type": "stdio",
-                    "method": "system_info"
+                    "method": "system_info_executor"  # Executor id
                 },
                 "input_data": {
                     "resource": "memory"
@@ -400,8 +399,7 @@ class TestAgentExecutor:
                 "has_children": False,
                 "dependencies": [],
                 "schemas": {
-                    "type": "stdio",
-                    "method": "system_info"
+                    "method": "system_info_executor"  # Executor id
                 },
                 "input_data": {
                     "resource": "disk"
@@ -672,8 +670,7 @@ class TestAgentExecutor:
             user_id=user_id,
             priority=1,
             schemas={
-                "type": "stdio",
-                "method": "system_info"
+                "method": "system_info_executor"  # Executor id
             },
             input_data={
                 "resource": "cpu"

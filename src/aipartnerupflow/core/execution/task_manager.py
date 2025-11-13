@@ -792,26 +792,52 @@ class TaskManager:
             
         Returns:
             Task execution result
-        
+            
         Raises:
             ValueError: If task_type is not registered in executor registry
         """
         schemas = task.schemas or {}
-        task_type = schemas.get("type", "stdio")
+        task_type = schemas.get("type")  # Optional: only used if method is not an executor id
         task_method = schemas.get("method", "command")
         
         logger.info(f"Executing task {task.id} with type={task_type}, method={task_method}")
         
         # Get executor from unified extension registry
         registry = get_registry()
-        extension = registry.get_by_type(ExtensionCategory.EXECUTOR, task_type)
         
-        if extension is None:
+        # Strategy: Try to use method as executor id first, then fall back to type-based lookup
+        # This allows:
+        # 1. Direct id-based lookup: method="crewai_executor" (no type needed)
+        # 2. Type-based lookup: type="stdio", method="command" (method is execution method, not id)
+        extension_id = None
+        extension = None
+        
+        # First, try to use method as executor id
+        if task_method:
+            extension = registry.get_by_id(task_method)
+            if extension and extension.category == ExtensionCategory.EXECUTOR:
+                extension_id = task_method
+                logger.debug(f"Using method '{task_method}' as executor id (type not needed)")
+        
+        # If method is not an executor id, fall back to type-based lookup
+        if extension is None or (extension and extension.category != ExtensionCategory.EXECUTOR):
+            if not task_type:
+                # If no type specified and method is not an executor id, use default
+                task_type = "stdio"
+                logger.debug(f"No type specified, defaulting to 'stdio'")
+            extension = registry.get_by_type(ExtensionCategory.EXECUTOR, task_type)
+            if extension:
+                extension_id = extension.id
+                logger.debug(f"Using type '{task_type}' to find executor '{extension_id}'")
+        
+        if extension is None or extension.category != ExtensionCategory.EXECUTOR:
             # Task type not registered
             registered_extensions = registry.list_by_category(ExtensionCategory.EXECUTOR)
             error_msg = (
-                f"Task type '{task_type}' is not registered. "
+                f"Task executor not found. "
+                f"type='{task_type}', method='{task_method}'. "
                 f"Registered executor types: {[ext.type for ext in registry.get_all_by_category(ExtensionCategory.EXECUTOR) if ext.type]}. "
+                f"Registered executor ids: {registry.list_by_category(ExtensionCategory.EXECUTOR)}. "
                 f"Please register an executor for this task type using "
                 f"register_extension(YourExecutorInstance, executor_class=YourExecutorClass)."
             )
@@ -821,13 +847,22 @@ class TaskManager:
                 "task_id": task.id,
                 "name": task.name,
                 "task_type": task_type,
+                "task_method": task_method,
                 "registered_types": [ext.type for ext in registry.get_all_by_category(ExtensionCategory.EXECUTOR) if ext.type],
+                "registered_ids": registry.list_by_category(ExtensionCategory.EXECUTOR),
                 "input_data": input_data,
                 "schemas": schemas
             }
         
+        # Merge params into input_data for executor initialization
+        # params are used for executor initialization (like works for CrewManager)
+        # input_data is used for execution inputs
+        executor_inputs = input_data.copy()
+        if task.params:
+            executor_inputs.update(task.params)
+        
         # Create executor instance for this task execution
-        executor = registry.create_executor_instance(extension.id, inputs=input_data)
+        executor = registry.create_executor_instance(extension_id, inputs=executor_inputs)
         
         if executor is None:
             error_msg = f"Failed to create executor instance for extension '{extension.id}'"
@@ -844,12 +879,14 @@ class TaskManager:
         
         # Prepare execution inputs
         execution_inputs = input_data.copy()
-        execution_inputs["method"] = task_method
+        # Note: method is no longer passed to executor.execute()
+        # Executors determine execution logic based on input_data fields
         
-        # Special handling for stdio executor (backward compatibility)
-        if task_type == "stdio":
-            # If method is system_info and resource is not specified, try to infer from task name
-            if task_method == "system_info" and "resource" not in execution_inputs:
+        # Special handling for system_info_executor (helper logic)
+        # Use extension.id to check if it's system_info_executor
+        if extension and extension.id == "system_info_executor":
+            # If resource is not specified, try to infer resource from task name
+            if "resource" not in execution_inputs:
                 task_name_lower = task.name.lower()
                 if "cpu" in task_name_lower:
                     execution_inputs["resource"] = "cpu"
@@ -859,10 +896,12 @@ class TaskManager:
                     execution_inputs["resource"] = "disk"
                 else:
                     execution_inputs["resource"] = "all"
-            
-            # Handle aggregate_results method for merging dependency results
-            if task_method == "aggregate_results":
-                return self._aggregate_dependency_results(task, input_data)
+        
+        # Handle aggregate_results - this is a special TaskManager feature, not an executor method
+        # Check if this is an aggregate_results request (legacy support)
+        # Note: aggregate_results is handled by TaskManager, not by any executor
+        if task_method == "aggregate_results":
+            return self._aggregate_dependency_results(task, input_data)
         
         # Execute task
         try:

@@ -33,6 +33,8 @@ from aipartnerupflow.core.config import (
 # Re-export extension decorator
 from aipartnerupflow.core.extensions.decorators import extension_register
 
+# Re-export tool decorator
+from aipartnerupflow.core.tools.decorators import tool_register
 __all__ = [
     # Hook decorators
     "register_pre_hook",
@@ -43,5 +45,7 @@ __all__ = [
     "clear_config",
     # Extension registration
     "extension_register",
+    # Tool registration
+    "tool_register",
 ]
 

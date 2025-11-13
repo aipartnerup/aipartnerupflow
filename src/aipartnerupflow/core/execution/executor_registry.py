@@ -27,13 +27,13 @@ class ExecutorRegistry:
     
     Example:
         # Register built-in executor
-        registry.register("stdio", StdioExecutor)
+        registry.register("system_info", SystemInfoExecutor)
         
         # Register third-party executor
         registry.register("custom", CustomExecutor)
         
         # Get executor instance
-        executor = registry.get_executor("stdio", inputs={...})
+        executor = registry.get_executor("system_info", inputs={...})
     """
     
     _instance: Optional["ExecutorRegistry"] = None
@@ -73,7 +73,7 @@ class ExecutorRegistry:
         
         Example:
             # Register with class
-            registry.register("stdio", StdioExecutor)
+            registry.register("system_info", SystemInfoExecutor)
             
             # Register with factory function
             def create_crew_executor(inputs):

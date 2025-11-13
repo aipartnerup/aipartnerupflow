@@ -5,9 +5,10 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 try:
-    from aipartnerupflow.extensions.crewai.decorators import crew_tool
-    from aipartnerupflow.extensions.crewai.tools import get_tool_registry, register_tool
-    from crewai.tools.base_tool import BaseTool
+    from aipartnerupflow.core.tools import tool_register, get_tool_registry, register_tool, BaseTool
+    # Backward compatibility aliases
+    tool = tool_register
+    crew_tool = tool_register
 except ImportError:
     crew_tool = None
     get_tool_registry = None

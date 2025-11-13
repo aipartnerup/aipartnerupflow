@@ -1,13 +1,13 @@
 """
-Tools module for CrewAI extensions
+Tool Registry and Resolution
 
-Provides resolve_tool function and tool registry for converting string tool references
-to callable tool objects.
+Provides ToolRegistry for tool registration and resolve_tool for converting
+string tool references to callable tool objects.
 """
 
 import ast
 from inspect import isfunction, isclass
-from typing import Dict, Any, Callable, Optional
+from typing import Dict, Any, Optional
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -98,11 +98,14 @@ def register_tool(name: str, tool: Any, override: bool = False) -> None:
         override: If True, allow overriding existing registration
     
     Example:
-        from aipartnerupflow.extensions.crewai.tool_registry import register_tool
-        from crewai_tools import SerperDevTool
+        from aipartnerupflow.core.tools import register_tool, BaseTool
         
-        register_tool("serper", SerperDevTool)
-        # Now can use "serper()" in agent tools config
+        class MyTool(BaseTool):
+            def _run(self, arg: str) -> str:
+                return f"Result: {arg}"
+        
+        register_tool("my_tool", MyTool)
+        # Now can use "my_tool()" in agent tools config
     """
     _registry.register(name, tool, override=override)
 
@@ -298,5 +301,4 @@ __all__ = [
     "register_tool",
     "resolve_tool",
 ]
-
 

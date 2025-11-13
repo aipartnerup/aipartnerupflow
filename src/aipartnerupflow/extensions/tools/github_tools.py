@@ -5,10 +5,9 @@ import aiohttp
 import asyncio
 import json
 from typing import Dict, Any, Optional, Type
-from crewai.tools.base_tool import BaseTool
+from aipartnerupflow.core.tools import BaseTool, tool_register
 from pydantic import BaseModel, Field
 from aipartnerupflow.core.utils.logger import get_logger
-from aipartnerupflow.extensions.crewai.decorators import crew_tool
 
 logger = get_logger(__name__)
 
@@ -19,7 +18,7 @@ class GitHubAnalysisInputSchema(BaseModel):
     include_repos: bool = Field(default=True, description="Whether to include repository analysis")
 
 
-@crew_tool()
+@tool_register()
 class GitHubAnalysisTool(BaseTool):
     """Tool for analyzing GitHub presence and repositories"""
     name: str = "GitHub Analysis Tool"
@@ -180,3 +179,4 @@ class GitHubAnalysisTool(BaseTool):
                 "github_followers_count": 0,
                 "error": str(e)
             }
+
