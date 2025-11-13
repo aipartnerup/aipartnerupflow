@@ -21,7 +21,14 @@ __all__ = [
 ]
 
 # Auto-import all tools from this directory to trigger @crew_tool() decorator registration
-# This ensures all tools are automatically registered when the tools package is imported
+# - Auto-import all tool modules in tools/__init__.py
+# - When importing aipartnerupflow.extensions.crewai.tools
+# - Automatically scan and import all .py files in the tools/ directory
+# - Module import -> Class definition execution -> @crew_tool() decorator execution -> Tool auto-registration
+#
+# This ensures:
+# - Users only need to import aipartnerupflow.extensions.crewai
+# - All tools will be automatically registered without manually importing each tool module
 try:
     import importlib
     import pkgutil
