@@ -134,17 +134,17 @@ def flow(
                 raise ValueError("--tasks must be a JSON array")
         elif executor_id:
             # Legacy mode: executor_id + inputs
-        if inputs_file:
-            with open(inputs_file, "r") as f:
-                inputs_dict = json.load(f)
-        elif inputs:
-            inputs_dict = json.loads(inputs)
-        else:
-            inputs_dict = {}
-        
+            if inputs_file:
+                with open(inputs_file, "r") as f:
+                    inputs_dict = json.load(f)
+            elif inputs:
+                inputs_dict = json.loads(inputs)
+            else:
+                inputs_dict = {}
+            
             typer.echo(f"Running executor: {executor_id} (legacy mode)")
             if inputs_dict:
-        typer.echo(f"Inputs: {json.dumps(inputs_dict, indent=2)}")
+                typer.echo(f"Inputs: {json.dumps(inputs_dict, indent=2)}")
         
             # Create a single task for executor
             task = {
