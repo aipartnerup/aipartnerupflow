@@ -253,6 +253,114 @@ class ExtensionRegistry:
             result.extend(extensions)
         return result
     
+    # Category-specific convenience methods
+    
+    def get_executor(self, executor_id: str) -> Optional[Extension]:
+        """
+        Get executor extension by ID (convenience method)
+        
+        Args:
+            executor_id: Executor extension ID
+        
+        Returns:
+            Extension if found and is an executor, None otherwise
+        """
+        extension = self.get_by_id(executor_id)
+        if extension and extension.category == ExtensionCategory.EXECUTOR:
+            return extension
+        return None
+    
+    def list_executors(self) -> List[Extension]:
+        """
+        List all executor extensions (convenience method)
+        
+        Returns:
+            List of all executor extensions
+        """
+        return self.get_all_by_category(ExtensionCategory.EXECUTOR)
+    
+    def get_storage(self, storage_id: str) -> Optional[Extension]:
+        """
+        Get storage extension by ID (convenience method)
+        
+        Args:
+            storage_id: Storage extension ID
+        
+        Returns:
+            Extension if found and is a storage backend, None otherwise
+        """
+        extension = self.get_by_id(storage_id)
+        if extension and extension.category == ExtensionCategory.STORAGE:
+            return extension
+        return None
+    
+    def list_storage_backends(self) -> List[Extension]:
+        """
+        List all storage backend extensions (convenience method)
+        
+        Returns:
+            List of all storage backend extensions
+        """
+        return self.get_all_by_category(ExtensionCategory.STORAGE)
+    
+    def get_hooks(self, hook_type: Optional[str] = None) -> List[Extension]:
+        """
+        Get hook extensions (convenience method)
+        
+        Args:
+            hook_type: Optional hook type filter
+        
+        Returns:
+            List of hook extensions (filtered by type if provided)
+        """
+        if hook_type:
+            return self.get_all_by_type(ExtensionCategory.HOOK, hook_type)
+        return self.get_all_by_category(ExtensionCategory.HOOK)
+    
+    def create_storage_instance(
+        self,
+        storage_id: str,
+        **kwargs
+    ) -> Optional[Any]:
+        """
+        Create a storage backend instance
+        
+        Args:
+            storage_id: Storage extension ID (e.g., "duckdb", "postgresql")
+            **kwargs: Connection parameters for storage backend
+        
+        Returns:
+            StorageBackend instance, or None if not found
+        """
+        extension = self.get_by_id(storage_id)
+        if not extension or extension.category != ExtensionCategory.STORAGE:
+            return None
+        
+        # Storage backends are typically singletons or stateless
+        # Return the extension instance itself (it implements StorageBackend interface)
+        return extension
+    
+    def create_hook_instance(
+        self,
+        hook_id: str
+    ) -> Optional[Any]:
+        """
+        Create a hook extension instance
+        
+        Args:
+            hook_id: Hook extension ID
+        
+        Returns:
+            HookExtension instance, or None if not found
+        """
+        extension = self.get_by_id(hook_id)
+        if not extension or extension.category != ExtensionCategory.HOOK:
+            return None
+        
+        # Hook extensions are typically singletons
+        # Return the extension instance itself (it implements HookExtension interface)
+        return extension
+    
     def get_all_by_type(
         self,
         category: ExtensionCategory,

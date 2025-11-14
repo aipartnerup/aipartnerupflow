@@ -9,13 +9,13 @@ import asyncio
 import platform
 from typing import Dict, Any
 from aipartnerupflow.core.base import BaseTask
-from aipartnerupflow.core.extensions.decorators import extension_register
+from aipartnerupflow.core.extensions.decorators import executor_register
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-@extension_register()
+@executor_register()
 class SystemInfoExecutor(BaseTask):
     """
     Executor for querying system resource information

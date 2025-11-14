@@ -18,7 +18,7 @@ import os
 import shlex
 from typing import Dict, Any, Optional, Set
 from aipartnerupflow.core.base import BaseTask
-from aipartnerupflow.core.extensions.decorators import extension_register
+from aipartnerupflow.core.extensions.decorators import executor_register
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -35,7 +35,7 @@ if _whitelist_str:
     logger.info(f"CommandExecutor: Command whitelist enabled with {len(STDIO_COMMAND_WHITELIST)} commands")
 
 
-@extension_register()
+@executor_register()
 class CommandExecutor(BaseTask):
     """
     Executor for executing shell commands via stdio

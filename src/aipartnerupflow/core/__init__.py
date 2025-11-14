@@ -31,6 +31,9 @@ from aipartnerupflow.core.extensions import (
     ExtensionRegistry,
     get_registry,
     register_extension,
+    executor_register,
+    storage_register,
+    hook_register,
 )
 from aipartnerupflow.core.types import (
     TaskTreeNode,
@@ -38,7 +41,7 @@ from aipartnerupflow.core.types import (
     TaskPostHook,
     TaskStatus,
 )
-# Unified decorators (convenience re-export from decorators module)
+    # Unified decorators (convenience re-export from decorators module)
 from aipartnerupflow.core.decorators import (
     register_pre_hook,
     register_post_hook,
@@ -49,7 +52,9 @@ from aipartnerupflow.core.decorators import (
     get_use_task_creator,
     set_require_existing_tasks,
     get_require_existing_tasks,
-    extension_register,
+    executor_register,
+    storage_register,
+    hook_register,
 )
 from aipartnerupflow.core.config import (
     get_pre_hooks,
@@ -92,7 +97,9 @@ __all__ = [
     "get_use_task_creator",
     "set_require_existing_tasks",
     "get_require_existing_tasks",
-    "extension_register",
+    "executor_register",
+    "storage_register",
+    "hook_register",
     # Configuration Registry (internal)
     "get_pre_hooks",
     "get_post_hooks",

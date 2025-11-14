@@ -18,7 +18,7 @@ from aipartnerupflow.api.agent_executor import AIPartnerUpFlowAgentExecutor
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.utils.logger import get_logger
 
-# Import executors to trigger @extension_register decorator
+# Import executors to trigger @executor_register decorator
 # This ensures the executors are registered before tests run
 try:
     from aipartnerupflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401

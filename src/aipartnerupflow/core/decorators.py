@@ -6,13 +6,13 @@ Similar to Flask's app decorators (@app.before_request, @app.route, etc.), this 
 provides a clean, unified API for registering hooks and extensions.
 
 All decorators are part of the core framework and can be imported from:
-    from aipartnerupflow import register_pre_hook, register_post_hook, extension_register
+    from aipartnerupflow import register_pre_hook, register_post_hook, executor_register
     
 Or directly from core:
     from aipartnerupflow.core.decorators import register_pre_hook
 
 Usage:
-    from aipartnerupflow import register_pre_hook, register_post_hook, extension_register
+    from aipartnerupflow import register_pre_hook, register_post_hook, executor_register
     
     @register_pre_hook
     async def my_pre_hook(task):
@@ -22,7 +22,7 @@ Usage:
     async def my_post_hook(task, input_data, result):
         ...
     
-    @extension_register()
+    @executor_register()
     class MyExecutor(BaseTask):
         ...
 """
@@ -40,8 +40,12 @@ from aipartnerupflow.core.config import (
     get_require_existing_tasks,
 )
 
-# Re-export extension decorator
-from aipartnerupflow.core.extensions.decorators import extension_register
+# Re-export extension decorators
+from aipartnerupflow.core.extensions.decorators import (
+    executor_register,
+    storage_register,
+    hook_register,
+)
 
 # Re-export tool decorator
 from aipartnerupflow.core.tools.decorators import tool_register
@@ -61,7 +65,9 @@ __all__ = [
     "set_require_existing_tasks",
     "get_require_existing_tasks",
     # Extension registration
-    "extension_register",
+    "executor_register",
+    "storage_register",
+    "hook_register",
     # Tool registration
     "tool_register",
 ]

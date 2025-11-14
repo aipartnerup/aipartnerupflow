@@ -41,7 +41,9 @@ from aipartnerupflow.core.decorators import (
     set_task_model_class,
     get_task_model_class,
     clear_config,
-    extension_register,
+    executor_register,
+    storage_register,
+    hook_register,
 )
 
 __all__ = [
@@ -61,7 +63,9 @@ __all__ = [
     "set_task_model_class",
     "get_task_model_class",
     "clear_config",
-    "extension_register",
+    "executor_register",
+    "storage_register",
+    "hook_register",
     # Version
     "__version__",
 ]

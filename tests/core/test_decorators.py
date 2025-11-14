@@ -5,7 +5,7 @@ Tests for the unified decorators system (Flask-style API):
 - register_pre_hook
 - register_post_hook
 - set_task_model_class / get_task_model_class
-- extension_register
+- executor_register
 """
 import pytest
 from unittest.mock import Mock, AsyncMock
@@ -15,7 +15,7 @@ from aipartnerupflow import (
     set_task_model_class,
     get_task_model_class,
     clear_config,
-    extension_register,
+    executor_register,
 )
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.types import TaskPreHook, TaskPostHook
@@ -227,7 +227,7 @@ class TestConfigDecorators:
 
 
 class TestExtensionDecorator:
-    """Test @extension_register decorator"""
+    """Test @executor_register decorator"""
     
     def setup_method(self):
         """Clear extension registry before each test"""
@@ -239,11 +239,11 @@ class TestExtensionDecorator:
         # Note: _extensions is a dict keyed by extension.id, not a list
         # We'll let tests register their own extensions
     
-    def test_extension_register_decorator(self):
-        """Test @extension_register decorator"""
+    def test_executor_register_decorator(self):
+        """Test @executor_register decorator"""
         from aipartnerupflow.core.base import BaseTask
         
-        @extension_register()
+        @executor_register()
         class TestExecutor(BaseTask):
             id = "test_executor"
             name = "Test Executor"
@@ -272,8 +272,8 @@ class TestExtensionDecorator:
         assert executor_instance.id == "test_executor"
         assert executor_instance.name == "Test Executor"
     
-    def test_extension_register_with_factory(self):
-        """Test @extension_register with custom factory"""
+    def test_executor_register_with_factory(self):
+        """Test @executor_register with custom factory"""
         from aipartnerupflow.core.base import BaseTask
         
         def custom_factory(inputs):
@@ -281,7 +281,7 @@ class TestExtensionDecorator:
             executor.custom_initialized = True
             return executor
         
-        @extension_register(factory=custom_factory)
+        @executor_register(factory=custom_factory)
         class TestExecutorWithFactory(BaseTask):
             id = "test_executor_factory"
             name = "Test Executor Factory"
@@ -365,7 +365,7 @@ class TestDecoratorIntegration:
             register_post_hook,
             set_task_model_class,
             get_task_model_class,
-            extension_register,
+            executor_register,
         )
         
         # Verify they are callable
@@ -373,7 +373,7 @@ class TestDecoratorIntegration:
         assert callable(register_post_hook)
         assert callable(set_task_model_class)
         assert callable(get_task_model_class)
-        assert callable(extension_register)
+        assert callable(executor_register)
 
 
 class TestConfigRegistryIsolation:

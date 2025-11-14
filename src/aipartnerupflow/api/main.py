@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 start_time = time.time()
 logger.info("Starting aipartnerupflow service")
 
-# Auto-discover built-in extensions (optional, extensions register via @extension_register decorator)
+# Auto-discover built-in extensions (optional, extensions register via @executor_register, @storage_register, @hook_register decorators)
 # This ensures extensions are available when TaskManager is used
 try:
     from aipartnerupflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401

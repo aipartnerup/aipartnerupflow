@@ -12,14 +12,14 @@ from crewai import Crew as CrewAI, LLM
 from crewai.agent import Agent
 from crewai.task import Task
 from aipartnerupflow.core.base import BaseTask
-from aipartnerupflow.core.extensions.decorators import extension_register
+from aipartnerupflow.core.extensions.decorators import executor_register
 from aipartnerupflow.core.utils.logger import get_logger
 from aipartnerupflow.core.tools import resolve_tool
 
 logger = get_logger(__name__)
 
 
-@extension_register()
+@executor_register()
 class CrewManager(BaseTask):
     """
     CrewManager class for executing agent crews (LLM-based via CrewAI)

@@ -6,6 +6,11 @@ optional functionality. Each extension is available via an extra dependency.
 
 Extensions implement the Extension interface and are registered in the unified
 ExtensionRegistry using globally unique IDs.
+
+Extensions are automatically registered when imported via type-specific decorators:
+- @executor_register() for executors
+- @storage_register() for storage backends
+- @hook_register() for hooks
 """
 
 # Auto-import tools extension to register all tools when extensions module is imported
@@ -17,6 +22,26 @@ except ImportError:
     pass
 except Exception:
     # Other errors (syntax errors, etc.) should not break import
+    pass
+
+# Auto-import storage extensions to trigger registration
+try:
+    from aipartnerupflow.extensions.storage import duckdb_storage  # noqa: F401
+    try:
+        from aipartnerupflow.extensions.storage import postgres_storage  # noqa: F401
+    except ImportError:
+        # PostgreSQL not available, skip
+        pass
+except ImportError:
+    # Storage extensions may not be available, that's okay
+    pass
+
+# Auto-import hook extensions to trigger registration
+try:
+    from aipartnerupflow.extensions.hooks import pre_execution_hook  # noqa: F401
+    from aipartnerupflow.extensions.hooks import post_execution_hook  # noqa: F401
+except ImportError:
+    # Hook extensions may not be available, that's okay
     pass
 
 __all__ = []

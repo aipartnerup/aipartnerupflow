@@ -16,7 +16,11 @@ from aipartnerupflow.core.extensions.registry import (
     get_registry,
     register_extension,
 )
-from aipartnerupflow.core.extensions.decorators import extension_register
+from aipartnerupflow.core.extensions.decorators import (
+    executor_register,
+    storage_register,
+    hook_register,
+)
 
 __all__ = [
     "Extension",
@@ -26,6 +30,8 @@ __all__ = [
     "ExtensionRegistry",
     "get_registry",
     "register_extension",
-    "extension_register",
+    "executor_register",
+    "storage_register",
+    "hook_register",
 ]
 
