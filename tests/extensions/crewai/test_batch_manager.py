@@ -288,6 +288,284 @@ class TestBatchManagerExecution:
         assert batch_manager.event_queue == mock_event_queue
         assert batch_manager.context == mock_context
 
+    def test_cancelable_property(self):
+        """Test that BatchManager has cancelable=True"""
+        batch_manager = BatchManager(works={})
+        assert batch_manager.cancelable is True, "BatchManager should support cancellation"
+    
+    @pytest.mark.asyncio
+    async def test_cancellation_before_execution(self):
+        """Test cancellation before any work execution starts"""
+        # Create cancellation checker that returns True immediately
+        cancellation_checker = Mock(return_value=True)
+        
+        # Create BatchManager with cancellation checker
+        batch_manager = BatchManager(
+            works={
+                "crew1": {
+                    "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
+                    "tasks": {"task1": {"description": "Task 1", "expected_output": "Output 1", "agent": "agent1"}}
+                },
+                "crew2": {
+                    "agents": {"agent2": {"role": "Agent 2", "goal": "Goal 2", "backstory": "Backstory 2"}},
+                    "tasks": {"task2": {"description": "Task 2", "expected_output": "Output 2", "agent": "agent2"}}
+                }
+            },
+            cancellation_checker=cancellation_checker
+        )
+        
+        # Execute batch - should be cancelled before first work
+        result = await batch_manager.execute()
+        
+        # Verify cancellation result
+        assert result["status"] == "cancelled"
+        assert "error" in result
+        assert "cancelled" in result["error"].lower()
+        assert "0" in result["error"] or "before" in result["error"].lower()
+        
+        # Verify cancellation checker was called
+        assert cancellation_checker.called
+    
+    @pytest.mark.asyncio
+    async def test_cancellation_after_first_work(self):
+        """Test cancellation after first work completes, preserving token_usage"""
+        # Create mock crew results with token_usage
+        mock_result1 = {
+            "status": "success",
+            "result": "Result from crew 1",
+            "token_usage": {
+                "total_tokens": 100,
+                "prompt_tokens": 60,
+                "completion_tokens": 40,
+                "cached_prompt_tokens": 0,
+                "successful_requests": 1
+            }
+        }
+        
+        mock_result2 = {
+            "status": "success",
+            "result": "Result from crew 2",
+            "token_usage": {
+                "total_tokens": 150,
+                "prompt_tokens": 90,
+                "completion_tokens": 60,
+                "cached_prompt_tokens": 0,
+                "successful_requests": 1
+            }
+        }
+        
+        # Create cancellation checker that returns False first (allow first work), then True (cancel)
+        # Call sequence: 1=before start, 2=before work1, 3=after work1 (cancel here)
+        call_count = [0]
+        def cancellation_checker():
+            call_count[0] += 1
+            # Return True on third call (after first work completes)
+            return call_count[0] > 2
+        
+        # Create mock CrewManager instances
+        mock_crew_manager1 = Mock(spec=CrewManager)
+        mock_crew_manager1.execute = AsyncMock(return_value=mock_result1)
+        mock_crew_manager1.set_streaming_context = Mock()
+        
+        mock_crew_manager2 = Mock(spec=CrewManager)
+        mock_crew_manager2.execute = AsyncMock(return_value=mock_result2)
+        mock_crew_manager2.set_streaming_context = Mock()
+        
+        # Create BatchManager with cancellation checker
+        batch_manager = BatchManager(
+            works={
+                "crew1": {
+                    "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
+                    "tasks": {"task1": {"description": "Task 1", "expected_output": "Output 1", "agent": "agent1"}}
+                },
+                "crew2": {
+                    "agents": {"agent2": {"role": "Agent 2", "goal": "Goal 2", "backstory": "Backstory 2"}},
+                    "tasks": {"task2": {"description": "Task 2", "expected_output": "Output 2", "agent": "agent2"}}
+                }
+            },
+            cancellation_checker=cancellation_checker
+        )
+        
+        # Mock CrewManager creation
+        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager') as mock_crew_class:
+            mock_crew_class.side_effect = [mock_crew_manager1, mock_crew_manager2]
+            
+            # Execute batch - should be cancelled after first work
+            result = await batch_manager.execute()
+            
+            # Verify cancellation result
+            assert result["status"] == "cancelled"
+            assert "error" in result
+            assert "cancelled" in result["error"].lower()
+            assert "1" in result["error"]  # Should mention 1 completed work
+            
+            # Verify only first crew executed
+            mock_crew_manager1.execute.assert_called_once()
+            mock_crew_manager2.execute.assert_not_called()
+            
+            # Verify token_usage is preserved from first work
+            assert "token_usage" in result
+            token_usage = result["token_usage"]
+            assert token_usage["total_tokens"] == 100  # Only from first work
+            assert token_usage["prompt_tokens"] == 60
+            assert token_usage["completion_tokens"] == 40
+            assert "status" not in token_usage  # token_usage shouldn't have status field
+    
+    @pytest.mark.asyncio
+    async def test_cancellation_preserves_token_usage_from_multiple_works(self):
+        """Test that cancellation preserves token_usage from all completed works"""
+        # Create mock crew results with token_usage
+        mock_result1 = {
+            "status": "success",
+            "result": "Result from crew 1",
+            "token_usage": {
+                "total_tokens": 100,
+                "prompt_tokens": 60,
+                "completion_tokens": 40,
+                "cached_prompt_tokens": 0,
+                "successful_requests": 1
+            }
+        }
+        
+        mock_result2 = {
+            "status": "success",
+            "result": "Result from crew 2",
+            "token_usage": {
+                "total_tokens": 150,
+                "prompt_tokens": 90,
+                "completion_tokens": 60,
+                "cached_prompt_tokens": 0,
+                "successful_requests": 1
+            }
+        }
+        
+        mock_result3 = {
+            "status": "success",
+            "result": "Result from crew 3",
+            "token_usage": {
+                "total_tokens": 200,
+                "prompt_tokens": 120,
+                "completion_tokens": 80,
+                "cached_prompt_tokens": 0,
+                "successful_requests": 1
+            }
+        }
+        
+        # Create cancellation checker that cancels after second work
+        # Call sequence: 1=before start, 2=before work1, 3=after work1, 4=before work2, 5=after work2 (cancel here)
+        call_count = [0]
+        def cancellation_checker():
+            call_count[0] += 1
+            # Return True on fifth call (after second work completes)
+            return call_count[0] > 4
+        
+        # Create mock CrewManager instances
+        mock_crew_manager1 = Mock(spec=CrewManager)
+        mock_crew_manager1.execute = AsyncMock(return_value=mock_result1)
+        mock_crew_manager1.set_streaming_context = Mock()
+        
+        mock_crew_manager2 = Mock(spec=CrewManager)
+        mock_crew_manager2.execute = AsyncMock(return_value=mock_result2)
+        mock_crew_manager2.set_streaming_context = Mock()
+        
+        mock_crew_manager3 = Mock(spec=CrewManager)
+        mock_crew_manager3.execute = AsyncMock(return_value=mock_result3)
+        mock_crew_manager3.set_streaming_context = Mock()
+        
+        # Create BatchManager with 3 works
+        batch_manager = BatchManager(
+            works={
+                "crew1": {
+                    "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
+                    "tasks": {"task1": {"description": "Task 1", "expected_output": "Output 1", "agent": "agent1"}}
+                },
+                "crew2": {
+                    "agents": {"agent2": {"role": "Agent 2", "goal": "Goal 2", "backstory": "Backstory 2"}},
+                    "tasks": {"task2": {"description": "Task 2", "expected_output": "Output 2", "agent": "agent2"}}
+                },
+                "crew3": {
+                    "agents": {"agent3": {"role": "Agent 3", "goal": "Goal 3", "backstory": "Backstory 3"}},
+                    "tasks": {"task3": {"description": "Task 3", "expected_output": "Output 3", "agent": "agent3"}}
+                }
+            },
+            cancellation_checker=cancellation_checker
+        )
+        
+        # Mock CrewManager creation
+        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager') as mock_crew_class:
+            mock_crew_class.side_effect = [mock_crew_manager1, mock_crew_manager2, mock_crew_manager3]
+            
+            # Execute batch - should be cancelled after second work
+            result = await batch_manager.execute()
+            
+            # Verify cancellation result
+            assert result["status"] == "cancelled"
+            assert "error" in result
+            assert "cancelled" in result["error"].lower()
+            assert "2" in result["error"]  # Should mention 2 completed works
+            
+            # Verify first two crews executed, third did not
+            mock_crew_manager1.execute.assert_called_once()
+            mock_crew_manager2.execute.assert_called_once()
+            mock_crew_manager3.execute.assert_not_called()
+            
+            # Verify token_usage is aggregated from both completed works
+            assert "token_usage" in result
+            token_usage = result["token_usage"]
+            assert token_usage["total_tokens"] == 250  # 100 + 150
+            assert token_usage["prompt_tokens"] == 150  # 60 + 90
+            assert token_usage["completion_tokens"] == 100  # 40 + 60
+            assert "status" not in token_usage  # token_usage shouldn't have status field
+    
+    @pytest.mark.asyncio
+    async def test_cancellation_with_no_token_usage(self):
+        """Test cancellation when completed works don't have token_usage"""
+        # Create mock crew results without token_usage
+        mock_result1 = {
+            "status": "success",
+            "result": "Result from crew 1"
+        }
+        
+        # Create cancellation checker that cancels after first work
+        # Call sequence: 1=before start, 2=before work1, 3=after work1 (cancel here)
+        call_count = [0]
+        def cancellation_checker():
+            call_count[0] += 1
+            return call_count[0] > 2
+        
+        # Create mock CrewManager
+        mock_crew_manager1 = Mock(spec=CrewManager)
+        mock_crew_manager1.execute = AsyncMock(return_value=mock_result1)
+        mock_crew_manager1.set_streaming_context = Mock()
+        
+        # Create BatchManager
+        batch_manager = BatchManager(
+            works={
+                "crew1": {
+                    "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
+                    "tasks": {"task1": {"description": "Task 1", "expected_output": "Output 1", "agent": "agent1"}}
+                }
+            },
+            cancellation_checker=cancellation_checker
+        )
+        
+        # Mock CrewManager creation
+        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager') as mock_crew_class:
+            mock_crew_class.return_value = mock_crew_manager1
+            
+            # Execute batch - should be cancelled after first work
+            result = await batch_manager.execute()
+            
+            # Verify cancellation result
+            assert result["status"] == "cancelled"
+            assert "error" in result
+            
+            # token_usage may or may not be present (depends on aggregation logic)
+            # If no token_usage in results, aggregation should return None
+            if "token_usage" in result:
+                # If present, should be valid
+                assert isinstance(result["token_usage"], dict)
+
 
 @pytest.mark.skipif(BatchManager is None or CrewManager is None, reason="BatchManager or CrewManager not available")
 class TestBatchManagerRealExecution:

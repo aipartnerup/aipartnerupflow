@@ -42,6 +42,9 @@ class CrewManager(BaseTask):
     tags: list[str] = []
     examples: list[str] = []
     
+    # Cancellation support: CrewAI's kickoff() is blocking and cannot be cancelled during execution
+    cancelable: bool = False
+    
     @property
     def type(self) -> str:
         """Extension type identifier for categorization"""
@@ -256,6 +259,58 @@ class CrewManager(BaseTask):
         # Default implementation
         return {}
     
+    def _check_cancellation(self) -> bool:
+        """
+        Check if task has been cancelled
+        
+        Uses cancellation_checker callback (provided by TaskManager) to check cancellation status.
+        Executor doesn't access database directly - cancellation state is managed by TaskManager.
+        
+        Note: CrewManager is not cancelable during execution (cancelable=False), so this method
+        is only useful for checking cancellation before execution starts.
+        
+        Returns:
+            True if task is cancelled, False otherwise
+        """
+        if not self.cancellation_checker:
+            return False
+        
+        try:
+            return self.cancellation_checker()
+        except Exception as e:
+            logger.warning(f"Failed to check cancellation: {str(e)}")
+            return False
+    
+    async def cancel(self) -> Dict[str, Any]:
+        """
+        Cancel crew execution
+        
+        This method is called by TaskManager when cancellation is requested.
+        
+        Note: CrewManager cannot be cancelled during execution (CrewAI's kickoff() is blocking).
+        If cancellation is requested during execution, this method will return a result indicating
+        that cancellation will be checked after execution completes.
+        
+        Returns:
+            Dictionary with cancellation result:
+            {
+                "status": "cancelled",
+                "message": str,
+                "token_usage": Dict,  # Token usage if available (from previous execution)
+            }
+        """
+        logger.info(f"Cancelling crew execution: {self.name}")
+        
+        # CrewManager cannot be cancelled during execution (CrewAI limitation)
+        # TaskManager will check cancellation after execution completes
+        cancel_result = {
+            "status": "cancelled",
+            "message": f"Crew execution cancelled: {self.name}. Note: If execution is in progress, cancellation will be checked after execution completes.",
+        }
+        
+        logger.info(f"Crew cancellation result: {cancel_result}")
+        return cancel_result
+    
     async def execute(self, inputs: Dict[str, Any] = {}) -> Dict[str, Any]:
         """
         Execute crew tasks
@@ -265,11 +320,33 @@ class CrewManager(BaseTask):
             
         Returns:
             Execution result dictionary with status, result/error, and token_usage
+            
+        Note:
+            **Cancellation Limitation**: CrewAI's `kickoff()` is a synchronous blocking call
+            that doesn't support cancellation during execution. Once `kickoff()` starts, it will
+            run to completion. Cancellation can only be checked:
+            1. Before execution starts (this method checks)
+            2. After execution completes (TaskManager checks)
+            
+            If cancellation is requested during execution, the crew will complete normally,
+            but TaskManager will detect the cancellation after execution and mark the task as cancelled.
+            Token usage will still be preserved even if cancelled.
         """
         token_usage = None  # Initialize token_usage to track LLM consumption
         
         try:
             logger.info(f"Starting crew execution: {self.name}")
+            
+            # Check cancellation before starting execution
+            # This is the only point where we can prevent execution
+            if self._check_cancellation():
+                logger.info(f"Task was cancelled before crew execution started")
+                return {
+                    "status": "cancelled",
+                    "error": "Task was cancelled before crew execution started",
+                    "result": None,
+                    "token_usage": None
+                }
             
             if inputs:
                 self.set_inputs(inputs)
@@ -278,13 +355,23 @@ class CrewManager(BaseTask):
                 raise ValueError("Crew not initialized")
             
             # Execute crew (synchronously - CrewAI doesn't support async yet)
+            # IMPORTANT: Once kickoff() starts, it cannot be cancelled.
+            # CrewAI's kickoff() is a blocking synchronous call with no cancellation support.
+            # This executor has cancelable=False, so cancellation during execution is not supported.
+            # If cancellation is requested during execution, the crew will complete normally,
+            # and TaskManager will detect cancellation after execution completes.
             result = self.crew.kickoff(inputs=self.inputs)
+            
+            # Note: We don't check cancellation here because:
+            # 1. This executor is not cancelable (cancelable=False)
+            # 2. If cancelled during execution, kickoff() already completed
+            # 3. TaskManager will check cancellation after executor returns
+            # 4. Token usage should be preserved regardless of cancellation status
             
             # Extract token usage from result (primary method when execution succeeds)
             if hasattr(result, 'token_usage'):
                 token_usage = self._parse_token_usage(result.token_usage)
                 if token_usage:
-                    token_usage['status'] = "success"
                     logger.info(f"Token usage from result: {token_usage}")
             
             # Process result
@@ -310,7 +397,6 @@ class CrewManager(BaseTask):
             if token_usage is None:
                 token_usage = self._extract_token_usage_from_handlers()
                 if token_usage:
-                    token_usage['status'] = "failed"
                     logger.info(f"Token usage from handlers (after failure): {token_usage}")
             
             # Build error result with token_usage

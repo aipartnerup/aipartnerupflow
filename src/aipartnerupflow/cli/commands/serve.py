@@ -29,6 +29,10 @@ def start(
     """
     try:
         typer.echo(f"Starting API server on {host}:{port}")
+        if reload:
+            typer.echo("Auto-reload enabled (development mode)")
+        if workers > 1 and not reload:
+            typer.echo(f"Starting with {workers} workers")
         
         # Create app
         from aipartnerupflow.api import create_app
@@ -41,9 +45,13 @@ def start(
             port=port,
             reload=reload,
             workers=workers if not reload else 1,
+            log_level="info",
         )
         
+    except KeyboardInterrupt:
+        typer.echo("\nServer stopped by user")
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error starting API server")
         raise typer.Exit(1)
 

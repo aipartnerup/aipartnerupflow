@@ -45,6 +45,9 @@ class SystemInfoExecutor(BaseTask):
         "Get all system resources"
     ]
     
+    # Cancellation support: Fast execution (< 1 second), cancellation not needed
+    cancelable: bool = False
+    
     @property
     def type(self) -> str:
         """Extension type identifier for categorization"""

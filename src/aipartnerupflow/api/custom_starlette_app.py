@@ -277,6 +277,9 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                     result = await self._handle_running_tasks_status_logic(params, request, request_id)
                 elif method == "tasks.running.count":
                     result = await self._handle_running_tasks_count_logic(params, request, request_id)
+                # Task cancellation
+                elif method == "tasks.cancel" or method == "tasks.running.cancel":
+                    result = await self._handle_task_cancel_logic(params, request, request_id)
                 else:
                     return JSONResponse(
                         status_code=400,
@@ -693,6 +696,107 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             
         except Exception as e:
             logger.error(f"Error getting running tasks count: {str(e)}", exc_info=True)
+            raise
+
+    async def _handle_task_cancel_logic(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> list:
+        """
+        Handle task cancellation - cancels one or more running tasks
+        
+        This method:
+        1. Calls TaskExecutor.cancel_task() for each task
+        2. Returns cancellation results with token_usage if available
+        
+        Params:
+            task_ids: List of task IDs to cancel (required)
+            context_ids: Alternative - list of context IDs (task IDs)
+            force: Optional boolean, if True force immediate cancellation (default: False)
+            error_message: Optional custom error message for cancellation
+        
+        Returns:
+            List of cancellation result dictionaries:
+            [
+                {
+                    "task_id": str,
+                    "status": "cancelled" | "failed",
+                    "message": str,
+                    "token_usage": Dict,  # Optional, if available
+                    "result": Any,  # Optional partial result if available
+                },
+                ...
+            ]
+        """
+        try:
+            # Get task IDs from params
+            task_ids = params.get("task_ids") or params.get("context_ids", [])
+            if isinstance(task_ids, str):
+                task_ids = task_ids.split(',')
+            
+            if not task_ids:
+                return []
+            
+            # Get force flag and error message
+            force = params.get("force", False)
+            error_message = params.get("error_message")
+            if not error_message:
+                error_message = "Force cancelled by user" if force else "Cancelled by user"
+            
+            # Get TaskExecutor
+            from aipartnerupflow.core.execution.task_executor import TaskExecutor
+            task_executor = TaskExecutor()
+            
+            # Get database session for permission checking
+            db_session = get_default_session()
+            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            
+            results = []
+            for task_id in task_ids:
+                try:
+                    # Check permission: get task to verify user_id
+                    task = await task_repository.get_task_by_id(task_id)
+                    if task:
+                        # Check permission if user_id is specified
+                        if task.user_id:
+                            self._check_permission(request, task.user_id, "cancel task for")
+                    else:
+                        # Task not found, but we'll still try to cancel (might be in memory)
+                        logger.warning(f"Task {task_id} not found in database, attempting cancellation anyway")
+                    
+                    # Call TaskExecutor.cancel_task() which handles:
+                    # 1. Calling executor.cancel() if executor supports cancellation
+                    # 2. Updating database with cancelled status and token_usage
+                    cancel_result = await task_executor.cancel_task(task_id, error_message)
+                    
+                    # Add task_id to result
+                    cancel_result["task_id"] = task_id
+                    cancel_result["force"] = force
+                    
+                    results.append(cancel_result)
+                    
+                except PermissionError as e:
+                    logger.warning(f"Permission denied for cancelling task {task_id}: {str(e)}")
+                    results.append({
+                        "task_id": task_id,
+                        "status": "failed",
+                        "message": f"Permission denied: {str(e)}",
+                        "error": "permission_denied"
+                    })
+                except Exception as e:
+                    logger.error(f"Error cancelling task {task_id}: {str(e)}", exc_info=True)
+                    results.append({
+                        "task_id": task_id,
+                        "status": "error",
+                        "error": str(e)
+                    })
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error handling task cancellation: {str(e)}", exc_info=True)
             raise
 
     async def _handle_health(self, params: dict, request_id: str) -> dict:

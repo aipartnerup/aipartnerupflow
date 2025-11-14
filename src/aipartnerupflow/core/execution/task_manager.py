@@ -33,7 +33,8 @@ class TaskManager:
         db: Union[Session, AsyncSession],
         root_task_id: Optional[str] = None,
         pre_hooks: Optional[List[TaskPreHook]] = None,
-        post_hooks: Optional[List[TaskPostHook]] = None
+        post_hooks: Optional[List[TaskPostHook]] = None,
+        executor_instances: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize TaskManager
@@ -59,6 +60,9 @@ class TaskManager:
                         # Custom result processing or logging
                         logger.info(f"Task {task.id} completed with result: {result}")
                     task_manager = TaskManager(db, post_hooks=[my_post_hook])
+            executor_instances: Optional shared dictionary for storing executor instances (task_id -> executor)
+                Used for cancellation support. If provided, executors created during execution are stored here
+                so that cancel_task() can access them. Typically passed from TaskExecutor.
         """
         self.db = db
         self.is_async = isinstance(db, AsyncSession)
@@ -73,6 +77,140 @@ class TaskManager:
         # This allows hooks to be registered globally via decorators
         self.pre_hooks = pre_hooks if pre_hooks is not None else get_pre_hooks()
         self.post_hooks = post_hooks if post_hooks is not None else get_post_hooks()
+        # Store executor instances for cancellation (task_id -> executor)
+        # Use shared executor_instances dict from TaskExecutor if provided, otherwise create new one
+        # This allows cancel_task() to access executors created during execution
+        self._executor_instances: Dict[str, Any] = executor_instances if executor_instances is not None else {}
+    
+    async def cancel_task(
+        self,
+        task_id: str,
+        error_message: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Cancel a task execution (called by external sources like CLI/API)
+        
+        This method:
+        1. Checks if task is running
+        2. If executor supports cancellation, calls executor.cancel() to get cancellation result
+        3. Updates database with cancelled status and token_usage from cancellation result
+        
+        Args:
+            task_id: Task ID to cancel
+            error_message: Optional error message for cancellation
+            
+        Returns:
+            Dictionary with cancellation result:
+            {
+                "status": "cancelled" | "failed",
+                "message": str,
+                "token_usage": Dict,  # Optional token usage from executor
+            }
+        """
+        try:
+            # Get task from database
+            task = await self.task_repository.get_task_by_id(task_id)
+            if not task:
+                return {
+                    "status": "failed",
+                    "message": f"Task {task_id} not found",
+                    "error": "Task not found"
+                }
+            
+            # Check if task can be cancelled
+            if task.status in ["completed", "failed", "cancelled"]:
+                return {
+                    "status": "failed",
+                    "message": f"Task {task_id} is already {task.status}, cannot cancel",
+                    "current_status": task.status
+                }
+            
+            logger.info(f"Cancelling task {task_id} (current status: {task.status})")
+            
+            # If task is in_progress and executor supports cancellation, call executor.cancel()
+            cancel_result = None
+            token_usage = None
+            result_data = None
+            executor_cancelled = False  # Track if executor.cancel() was actually called
+            
+            if task.status == "in_progress":
+                executor = self._executor_instances.get(task_id)
+                if executor and hasattr(executor, 'cancel'):
+                    try:
+                        logger.info(f"Calling executor.cancel() for task {task_id}")
+                        cancel_result = await executor.cancel()
+                        executor_cancelled = True
+                        logger.info(f"Executor {executor.__class__.__name__} cancel() returned: {cancel_result}")
+                        
+                        if cancel_result and cancel_result.get("status") == "cancelled":
+                            token_usage = cancel_result.get("token_usage")
+                            # Use result if available, otherwise use partial_result
+                            result_data = cancel_result.get("result") or cancel_result.get("partial_result")
+                    except Exception as e:
+                        logger.warning(f"Failed to call executor.cancel() for task {task_id}: {str(e)}")
+                        cancel_result = {
+                            "status": "failed",
+                            "message": f"Failed to cancel executor: {str(e)}",
+                            "error": str(e)
+                        }
+            
+            # Update database with cancelled status
+            error_msg = error_message or (cancel_result.get("message") if cancel_result else "Cancelled by user")
+            
+            # Prepare update data - merge all fields in one update
+            update_data = {
+                "status": "cancelled",
+                "error": error_msg,
+                "completed_at": datetime.now(timezone.utc)
+            }
+            
+            # If we have result data (from executor.cancel()), save it
+            if result_data:
+                update_data["result"] = result_data
+            
+            # If token_usage is available, merge it into result
+            # If result_data exists, merge token_usage into it; otherwise create new dict
+            if token_usage:
+                if result_data and isinstance(result_data, dict):
+                    # Merge token_usage into existing result
+                    result_with_token = result_data.copy()
+                    result_with_token["token_usage"] = token_usage
+                    update_data["result"] = result_with_token
+                else:
+                    # Create new result dict with token_usage
+                    update_data["result"] = {"token_usage": token_usage}
+            
+            # Update task status in one call (combines status, error, result, token_usage)
+            await self.task_repository.update_task_status(
+                task_id=task_id,
+                **update_data
+            )
+            
+            # Clear executor reference
+            self._executor_instances.pop(task_id, None)
+            
+            # Build return result
+            result = {
+                "status": "cancelled",
+                "message": error_msg,
+            }
+            
+            if token_usage:
+                result["token_usage"] = token_usage
+            
+            if result_data:
+                result["result"] = result_data
+            
+            logger.info(f"Task {task_id} cancelled successfully")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error cancelling task {task_id}: {str(e)}", exc_info=True)
+            return {
+                "status": "failed",
+                "message": f"Failed to cancel task {task_id}",
+                "error": str(e)
+            }
 
     
     async def distribute_task_tree(
@@ -343,8 +481,24 @@ class TaskManager:
                 logger.info(f"Streaming marked as final, stopping single task execution for {task.id}")
                 return
                 
-            if task.status in ["completed", "failed", "in_progress"]:
+            # Check if task is already finished or cancelled
+            if task.status in ["completed", "failed", "cancelled"]:
                 logger.info(f"Task {task.id} already {task.status}, skipping execution")
+                return
+            
+            # Check if task is already in progress (may have been started by another process)
+            if task.status == "in_progress":
+                logger.info(f"Task {task.id} already in_progress, skipping execution")
+                return
+            
+            # Check if task was cancelled before starting (double-check after potential race condition)
+            # Refresh task from database to get latest status
+            task = await self.task_repository.get_task_by_id(task.id)
+            if not task:
+                raise ValueError(f"Task {task.id} not found")
+            
+            if task.status == "cancelled":
+                logger.info(f"Task {task.id} was cancelled, skipping execution")
                 return
             
             # Send task start status if streaming is enabled
@@ -362,10 +516,24 @@ class TaskManager:
             task = await self.task_repository.get_task_by_id(task.id)
             if not task:
                 raise ValueError(f"Task {task.id} not found after status update")
+            
+            # Final check: if task was cancelled between status update and refresh
+            if task.status == "cancelled":
+                logger.info(f"Task {task.id} was cancelled after status update, stopping execution")
+                return
+            
             logger.info(f"Task {task.id} status updated to in_progress")
             
             # Resolve dependencies first (merge dependency results into input_data)
             resolved_input_data = await self._resolve_task_dependencies(task)
+            
+            # Check cancellation before proceeding
+            task = await self.task_repository.get_task_by_id(task.id)
+            if not task:
+                raise ValueError(f"Task {task.id} not found")
+            if task.status == "cancelled":
+                logger.info(f"Task {task.id} was cancelled during dependency resolution, stopping execution")
+                return
             
             if resolved_input_data != (task.input_data or {}):
                 # Update input data using repository
@@ -374,6 +542,11 @@ class TaskManager:
                 task = await self.task_repository.get_task_by_id(task.id)
                 if not task:
                     raise ValueError(f"Task {task.id} not found after input data update")
+                
+                # Check cancellation again
+                if task.status == "cancelled":
+                    logger.info(f"Task {task.id} was cancelled after input data update, stopping execution")
+                    return
             
             # Execute pre-hooks (after dependency resolution, to allow user adjustment based on complete data)
             # Pre-hooks can access and modify task.input_data directly
@@ -404,13 +577,45 @@ class TaskManager:
             else:
                 logger.debug(f"Pre-hooks did not modify input_data for task {task.id}")
             
+            # Check cancellation before executing
+            task = await self.task_repository.get_task_by_id(task.id)
+            if not task:
+                raise ValueError(f"Task {task.id} not found")
+            if task.status == "cancelled":
+                logger.info(f"Task {task.id} was cancelled before execution, stopping")
+                return
+            
             # Execute task using agent executor
             # Use task.input_data (which may have been modified by pre-hooks)
             final_input_data = task.input_data or {}
             logger.info(f"Task {task.id} execution - calling agent executor (name: {task.name})")
             
             # Execute task based on schemas
+            # Note: For long-running executors, cancellation check should be done inside executor
+            # TaskManager can only check before and after executor execution
             task_result = await self._execute_task_with_schemas(task, final_input_data)
+            
+            # Check cancellation after execution (in case it was cancelled during execution)
+            # Note: If task was cancelled, cancel_task() was already called by external source,
+            # so we just need to stop execution and preserve the cancelled status
+            task = await self.task_repository.get_task_by_id(task.id)
+            if task and task.status == "cancelled":
+                logger.info(f"Task {task.id} was cancelled during execution, stopping")
+                
+                # Clear executor reference
+                self._executor_instances.pop(task.id, None)
+                
+                # Don't update to completed, keep cancelled status
+                if self.stream:
+                    # StreamingCallbacks may not have task_cancelled method, use task_failed as fallback
+                    if hasattr(self.streaming_callbacks, 'task_cancelled'):
+                        self.streaming_callbacks.task_cancelled(task.id)
+                    else:
+                        self.streaming_callbacks.task_failed(task.id, "Task was cancelled")
+                return
+            
+            # Clear executor reference after successful execution
+            self._executor_instances.pop(task.id, None)
             
             # Update task status using repository
             await self.task_repository.update_task_status(
@@ -861,8 +1066,36 @@ class TaskManager:
         if task.params:
             executor_inputs.update(task.params)
         
+        # Create cancellation checker callback (closure)
+        # This allows executor to check cancellation without accessing database directly
+        # Executor calls this function to check if task is cancelled
+        # The checker uses a cached task status and refreshes it when possible
+        # Note: In sync context (like CrewAI), we use cached status; TaskManager will check after execution
+        
+        # Cache current task status (will be refreshed by TaskManager checkpoints)
+        cached_cancelled = task.status == "cancelled"
+        
+        def cancellation_checker() -> bool:
+            """
+            Synchronous cancellation checker (executor calls this)
+            
+            Returns True if task is cancelled, False otherwise.
+            Uses cached status for sync executors (like CrewAI).
+            TaskManager will check database at checkpoints.
+            """
+            # For sync executors, use cached status
+            # TaskManager will check database at checkpoints (before/after execution)
+            # This is a trade-off: sync executors can't check database directly
+            # but TaskManager ensures cancellation is checked at key points
+            return cached_cancelled
+        
         # Create executor instance for this task execution
-        executor = registry.create_executor_instance(extension_id, inputs=executor_inputs)
+        # Pass cancellation_checker callback to executor
+        executor = registry.create_executor_instance(
+            extension_id, 
+            inputs=executor_inputs,
+            cancellation_checker=cancellation_checker  # Pass cancellation checker callback
+        )
         
         if executor is None:
             error_msg = f"Failed to create executor instance for extension '{extension.id}'"
@@ -876,6 +1109,13 @@ class TaskManager:
                 "input_data": input_data,
                 "schemas": schemas
             }
+        
+        # Store executor instance for cancellation support
+        # This allows TaskManager to actively call executor.cancel() when cancellation is detected
+        # Only store if executor implements cancel() method (supports cancellation)
+        if hasattr(executor, 'cancel'):
+            self._executor_instances[task.id] = executor
+            logger.debug(f"Stored executor instance for task {task.id} (supports cancellation)")
         
         # Prepare execution inputs
         execution_inputs = input_data.copy()
@@ -901,6 +1141,8 @@ class TaskManager:
         # Check if this is an aggregate_results request (legacy support)
         # Note: aggregate_results is handled by TaskManager, not by any executor
         if task_method == "aggregate_results":
+            # Clear executor reference before returning
+            self._executor_instances.pop(task.id, None)
             return self._aggregate_dependency_results(task, input_data)
         
         # Execute task
@@ -909,6 +1151,8 @@ class TaskManager:
             return result
         except Exception as e:
             logger.error(f"Error executing task {task.id} with executor {executor.__class__.__name__}: {e}", exc_info=True)
+            # Clear executor reference on error
+            self._executor_instances.pop(task.id, None)
             return {
                 "error": str(e),
                 "task_id": task.id,

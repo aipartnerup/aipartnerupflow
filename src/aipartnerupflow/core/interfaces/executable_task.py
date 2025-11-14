@@ -71,6 +71,35 @@ class ExecutableTask(Extension, ABC):
             JSON Schema dictionary describing input parameters
         """
         pass
+    
+    async def cancel(self) -> Dict[str, Any]:
+        """
+        Cancel task execution (optional method)
+        
+        This method is called by TaskManager when cancellation is requested.
+        Executors that support cancellation should implement this method.
+        
+        Returns:
+            Dictionary with cancellation result:
+            {
+                "status": "cancelled" | "failed",
+                "message": str,  # Optional cancellation message
+                "partial_result": Any,  # Optional partial result if available
+                "token_usage": Dict,  # Optional token usage if available
+            }
+        
+        Note:
+            - If executor doesn't implement this method, TaskManager will handle cancellation
+              by checking cancellation status and stopping execution at checkpoints
+            - For executors that cannot be cancelled during execution (e.g., CrewManager),
+              this method may return a result indicating cancellation will be checked after execution
+        """
+        # Default implementation: return not supported
+        return {
+            "status": "failed",
+            "message": "Cancellation not supported by this executor",
+            "error": "Executor does not implement cancel() method"
+        }
 
 
 __all__ = ["ExecutableTask"]

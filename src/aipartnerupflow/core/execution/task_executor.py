@@ -68,6 +68,9 @@ class TaskExecutor:
             self.task_model_class = get_task_model_class()
             self.pre_hooks = get_pre_hooks()
             self.post_hooks = get_post_hooks()
+            # Store executor instances for cancellation (task_id -> executor)
+            # This allows cancel_task() to access executors created during execution
+            self._executor_instances: Dict[str, Any] = {}
             TaskExecutor._initialized = True
             logger.info(
                 f"Initialized TaskExecutor "
@@ -124,11 +127,13 @@ class TaskExecutor:
         try:
             # Create TaskManager with hooks (cached at initialization)
             # In production, hooks are registered at application startup before TaskExecutor creation
+            # Pass shared executor_instances so TaskManager can store executors for cancellation
             task_manager = TaskManager(
                 db_session,
                 root_task_id=root_task_id,
                 pre_hooks=self.pre_hooks,
-                post_hooks=self.post_hooks
+                post_hooks=self.post_hooks,
+                executor_instances=self._executor_instances  # Pass shared executor instances
             )
             
             if use_streaming and streaming_callbacks_context:
@@ -208,6 +213,50 @@ class TaskExecutor:
     def is_task_running(self, context_id: str) -> bool:
         """Check if a task is running"""
         return self.task_tracker.is_task_running(context_id)
+    
+    async def cancel_task(
+        self,
+        task_id: str,
+        error_message: Optional[str] = None,
+        db_session: Optional[Union[Session, AsyncSession]] = None
+    ) -> Dict[str, Any]:
+        """
+        Cancel a task execution
+        
+        This method:
+        1. Creates a TaskManager instance
+        2. Calls TaskManager.cancel_task() to handle cancellation
+        3. Stops task tracking
+        
+        Args:
+            task_id: Task ID to cancel
+            error_message: Optional error message for cancellation
+            db_session: Optional database session (defaults to get_default_session())
+            
+        Returns:
+            Dictionary with cancellation result from TaskManager
+        """
+        if db_session is None:
+            db_session = get_default_session()
+        
+        # Create TaskManager instance with shared executor_instances
+        # This allows cancel_task() to access executors created during execution
+        task_manager = TaskManager(
+            db_session,
+            root_task_id=task_id,
+            pre_hooks=self.pre_hooks,
+            post_hooks=self.post_hooks,
+            executor_instances=self._executor_instances  # Pass shared executor instances
+        )
+        
+        # Call TaskManager.cancel_task()
+        result = await task_manager.cancel_task(task_id, error_message)
+        
+        # Stop task tracking if task was running
+        if self.is_task_running(task_id):
+            await self.stop_task_tracking(task_id)
+        
+        return result
 
     def _build_task_tree_from_tasks(
         self,

@@ -6,7 +6,7 @@ BaseTask to get common implementations, or implement ExecutableTask directly
 for maximum flexibility.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from aipartnerupflow.core.interfaces.executable_task import ExecutableTask
 
 
@@ -35,6 +35,11 @@ class BaseTask(ExecutableTask):
     tags: list[str] = []
     examples: list[str] = []
     
+    # Cancellation support
+    # Set to True if executor supports cancellation during execution
+    # Set to False if executor cannot be cancelled once execution starts
+    cancelable: bool = False
+    
     def __init__(self, inputs: Optional[Dict[str, Any]] = None, **kwargs: Any):
         """
         Initialize BaseTask
@@ -42,12 +47,18 @@ class BaseTask(ExecutableTask):
         Args:
             inputs: Initial input parameters
             **kwargs: Additional configuration options
+                - task_id: Task ID for cancellation checking (optional)
         """
         self.inputs: Dict[str, Any] = inputs or {}
         
         # Streaming context for progress updates
         self.event_queue = None
         self.context = None
+        
+        # Cancellation checker callback (set by TaskManager)
+        # Executor calls this function to check if task is cancelled
+        # Returns True if cancelled, False otherwise
+        self.cancellation_checker: Optional[Callable[[], bool]] = kwargs.get("cancellation_checker")
         
         # Initialize with any provided kwargs
         self.init(**kwargs)
@@ -66,6 +77,10 @@ class BaseTask(ExecutableTask):
             self.examples = kwargs["examples"]
         if "inputs" in kwargs:
             self.inputs = kwargs["inputs"]
+        if "cancellation_checker" in kwargs:
+            self.cancellation_checker = kwargs["cancellation_checker"]
+        if "cancelable" in kwargs:
+            self.cancelable = kwargs["cancelable"]
     
     def set_inputs(self, inputs: Dict[str, Any]) -> None:
         """

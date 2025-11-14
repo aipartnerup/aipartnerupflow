@@ -189,7 +189,8 @@ class ExtensionRegistry:
     def create_executor_instance(
         self,
         extension_id: str,
-        inputs: Optional[Dict[str, Any]] = None
+        inputs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any
     ) -> Optional[Any]:
         """
         Create a new executor instance for task execution
@@ -201,27 +202,39 @@ class ExtensionRegistry:
         Args:
             extension_id: Extension ID
             inputs: Optional input parameters for executor initialization
+            **kwargs: Additional parameters (e.g., task_id for cancellation checking)
         
         Returns:
             Executor instance (implements ExecutorLike protocol), or None if not found or not an executor
         
         Example:
-            executor = registry.create_executor_instance("stdio_executor", inputs={...})
+            executor = registry.create_executor_instance("stdio_executor", inputs={...}, task_id="task-123")
         """
         extension = self._by_id.get(extension_id)
         if not extension or extension.category != ExtensionCategory.EXECUTOR:
             return None
         
+        # Merge kwargs into inputs for executor initialization
+        executor_init_params = (inputs or {}).copy()
+        executor_init_params.update(kwargs)
+        
         # Use factory function if available
         if extension_id in self._factory_functions:
             factory = self._factory_functions[extension_id]
-            return factory(inputs or {})
+            return factory(executor_init_params)
         
         # Use executor class if available
         if extension_id in self._executor_classes:
             executor_class = self._executor_classes[extension_id]
             try:
-                return executor_class(inputs=inputs or {})
+                return executor_class(**executor_init_params)
+            except TypeError:
+                # Fallback: try with inputs parameter if **kwargs fails
+                try:
+                    return executor_class(inputs=inputs or {}, **kwargs)
+                except Exception as e:
+                    logger.error(f"Failed to instantiate executor '{executor_class.__name__}': {e}")
+                    raise
             except Exception as e:
                 logger.error(f"Failed to instantiate executor '{executor_class.__name__}': {e}")
                 raise
@@ -230,7 +243,14 @@ class ExtensionRegistry:
         # Check if it has the required methods (structural typing via Protocol)
         if hasattr(extension, 'execute') and hasattr(extension, 'get_input_schema'):
             try:
-                return extension.__class__(inputs=inputs or {})
+                return extension.__class__(**executor_init_params)
+            except TypeError:
+                # Fallback: try with inputs parameter
+                try:
+                    return extension.__class__(inputs=inputs or {}, **kwargs)
+                except Exception as e:
+                    logger.error(f"Failed to instantiate executor from template: {e}")
+                    raise
             except Exception as e:
                 logger.error(f"Failed to instantiate executor from template: {e}")
                 raise

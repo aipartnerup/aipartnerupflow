@@ -46,6 +46,10 @@ class BatchManager(BaseTask):
     examples: list[str] = ["Execute multiple crews as a batch"]
     works: Dict[str, Any] = {}
     
+    # Cancellation support: BatchManager can be cancelled between works
+    cancelable: bool = True
+    _cancelled: bool = False  # Internal flag for cancellation
+    
     @property
     def type(self) -> str:
         """Extension type identifier for categorization"""
@@ -60,6 +64,9 @@ class BatchManager(BaseTask):
         # Additional BatchManager-specific initialization
         self.storage = kwargs.get("storage")
         self.works = kwargs.get("works", {})
+        
+        # Cancellation checker is set by BaseTask.__init__ if provided in kwargs
+        # self.cancellation_checker is available from BaseTask
     
     def init(self, **kwargs: Any) -> None:
         """Initialize batch manager with configuration"""
@@ -95,6 +102,81 @@ class BatchManager(BaseTask):
         # Default implementation - should be overridden by subclasses
         return {}
     
+    def _check_cancellation(self) -> bool:
+        """
+        Check if task has been cancelled
+        
+        Uses cancellation_checker callback (provided by TaskManager) to check cancellation status.
+        Executor doesn't access database directly - cancellation state is managed by TaskManager.
+        
+        Returns:
+            True if task is cancelled, False otherwise
+        """
+        # Check internal cancellation flag first
+        if self._cancelled:
+            return True
+        
+        if not self.cancellation_checker:
+            return False
+        
+        try:
+            cancelled = self.cancellation_checker()
+            if cancelled:
+                self._cancelled = True  # Set internal flag
+            return cancelled
+        except Exception as e:
+            logger.warning(f"Failed to check cancellation: {str(e)}")
+            return False
+    
+    async def cancel(self) -> Dict[str, Any]:
+        """
+        Cancel batch execution
+        
+        This method is called by TaskManager when cancellation is requested.
+        BatchManager can be cancelled between works, preserving partial results and token_usage.
+        
+        Returns:
+            Dictionary with cancellation result:
+            {
+                "status": "cancelled",
+                "message": str,
+                "partial_result": Dict,  # Partial results from completed works
+                "token_usage": Dict,  # Aggregated token usage from completed works
+            }
+        """
+        logger.info(f"Cancelling batch execution: {self.name}")
+        
+        # Set cancellation flag
+        self._cancelled = True
+        
+        # Try to get partial results and token usage
+        partial_result = None
+        token_usage = None
+        
+        try:
+            # If we have partial results from executed works, use them
+            if hasattr(self, '_last_results') and self._last_results:
+                partial_result = self._last_results
+                # Aggregate token usage from completed works
+                token_usage = self._aggregate_token_usage(self._last_results)
+        except Exception as e:
+            logger.warning(f"Failed to get partial results during cancellation: {str(e)}")
+        
+        # Build cancellation result
+        cancel_result = {
+            "status": "cancelled",
+            "message": f"Batch execution cancelled: {self.name}",
+        }
+        
+        if partial_result:
+            cancel_result["partial_result"] = partial_result
+        
+        if token_usage:
+            cancel_result["token_usage"] = token_usage
+        
+        logger.info(f"Batch cancellation result: {cancel_result}")
+        return cancel_result
+    
     async def execute_works(self) -> Dict[str, Any]:
         """
         Execute all works sequentially
@@ -103,17 +185,35 @@ class BatchManager(BaseTask):
         (atomic operation). Results are collected and returned as a dictionary.
         Even if a work fails, its result (including token_usage) is collected.
         
+        Cancellation support: Checks task status before executing each work.
+        If task is cancelled, stops execution and returns partial results with token_usage.
+        
         Returns:
             Dictionary mapping work names to their results
         """
         if not self.works:
             raise ValueError("No works found in batch")
         
+        # Check cancellation before starting
+        if self._check_cancellation():
+            raise Exception("Task was cancelled before batch execution started")
+        
         # Execute works sequentially
         data = {}
         failed_works = []
         
         for work_name, work in self.works.items():
+            # Check cancellation before each work
+            if self._check_cancellation():
+                logger.info(f"Task was cancelled, stopping batch execution after {len(data)}/{len(self.works)} works")
+                # Store partial results for token_usage aggregation
+                self._last_results = data
+                # Return partial results with token_usage from completed works
+                # This ensures we don't lose token_usage data
+
+                raise Exception(f"Task was cancelled. Completed {len(data)}/{len(self.works)} works. Token usage preserved.")
+
+            
             try:
                 logger.info(f"Executing work: {work_name}")
                 
@@ -131,11 +231,13 @@ class BatchManager(BaseTask):
                 # Works format: {"work_name": {"agents": {...}, "tasks": {...}}}
                 # Or direct format: {"agents": {...}, "tasks": {...}}
                 # CrewManager now supports both formats
+                # Pass cancellation_checker to CrewManager for cancellation checking
                 _crew_manager = CrewManager(
                     name=work_name,
                     works=work,
                     inputs=fresh_inputs,
-                    is_sub_crew=True
+                    is_sub_crew=True,
+                    cancellation_checker=self.cancellation_checker  # Pass cancellation checker callback
                 )
                 
                 # Set streaming context if available
@@ -153,10 +255,26 @@ class BatchManager(BaseTask):
                     failed_works.append(work_name)
                     error_str = result.get("error", "Unknown error")
                     logger.error(f"Work {work_name} failed: {error_str}")
+                elif isinstance(result, dict) and result.get("status") == "cancelled":
+                    # If a sub-crew was cancelled, treat the batch as cancelled
+                    failed_works.append(work_name) # Mark as failed to trigger batch cancellation logic
+                    logger.warning(f"Work {work_name} was cancelled, propagating cancellation to batch")
                 else:
                     logger.info(f"Work {work_name} completed successfully")
+                
+                # Check cancellation after each work completes (allows cancellation between works)
+                if self._check_cancellation():
+                    logger.info(f"Task was cancelled after completing {len(data)}/{len(self.works)} works")
+                    # Store partial results for token_usage aggregation
+                    self._last_results = data
+                    # Return partial results with token_usage from completed works
+                    raise Exception(f"Task was cancelled. Completed {len(data)}/{len(self.works)} works. Token usage preserved.")
                     
             except Exception as e:
+                # Check if this is a cancellation exception (re-raise it to propagate)
+                if "cancelled" in str(e).lower() and "Task was cancelled" in str(e):
+                    raise  # Re-raise cancellation exception to propagate it
+                
                 # If execution throws exception, create a failed result
                 logger.error(f"Work {work_name} threw exception: {str(e)}", exc_info=True)
                 failed_works.append(work_name)
@@ -167,6 +285,7 @@ class BatchManager(BaseTask):
                 }
         
         # If any work failed, raise exception (atomic operation)
+        # But preserve token_usage from completed works
         if failed_works:
             error_msg = f"Failed works: {', '.join(failed_works)}"
             logger.error(error_msg)
@@ -225,30 +344,37 @@ class BatchManager(BaseTask):
             return success_result
             
         except Exception as e:
-            logger.error(f"Batch execution failed: {str(e)}", exc_info=True)
+            error_msg = str(e)
+            logger.error(f"Batch execution failed: {error_msg}", exc_info=True)
+            
+            # Check if this is a cancellation error
+            is_cancelled = "cancelled" in error_msg.lower()
             
             # Try to aggregate token usage from already executed works
+            # This ensures token_usage is preserved even when execution fails or is cancelled
             aggregated_token_usage = None
             try:
-                # If we have partial results, try to aggregate token usage from them
-                if hasattr(self, '_last_results'):
+                # If we have partial results (from cancellation or failure), aggregate token usage
+                if hasattr(self, '_last_results') and self._last_results:
                     aggregated_token_usage = self._aggregate_token_usage(self._last_results)
                     if aggregated_token_usage:
-                        aggregated_token_usage['status'] = 'failed'
+                        # Note: token_usage doesn't need status field, result already has status
+                        logger.info(f"Aggregated token usage from executed works: {aggregated_token_usage}")
             except Exception as agg_error:
                 logger.warning(f"Failed to aggregate token usage after failure: {str(agg_error)}")
             
             # Build error result with aggregated token_usage
             error_result = {
-                "status": "failed",
-                "error": str(e),
+                "status": "cancelled" if is_cancelled else "failed",
+                "error": error_msg,
                 "result": None
             }
             
-            # Add aggregated token usage even when execution fails
+            # Add aggregated token usage even when execution fails or is cancelled
+            # This preserves token_usage from completed works
             if aggregated_token_usage:
                 error_result['token_usage'] = aggregated_token_usage
-                logger.info(f"Aggregated token usage from executed works (marked as failed): {aggregated_token_usage}")
+                logger.info(f"Token usage preserved: {aggregated_token_usage}")
             
             return error_result
     
@@ -303,8 +429,7 @@ class BatchManager(BaseTask):
                 'prompt_tokens': 0,
                 'completion_tokens': 0,
                 'cached_prompt_tokens': 0,
-                'successful_requests': 0,
-                'status': 'success'
+                'successful_requests': 0
             }
             
             has_token_usage = False
@@ -322,10 +447,7 @@ class BatchManager(BaseTask):
                     aggregated_token_usage['completion_tokens'] += work_token_usage.get('completion_tokens', 0)
                     aggregated_token_usage['cached_prompt_tokens'] += work_token_usage.get('cached_prompt_tokens', 0)
                     aggregated_token_usage['successful_requests'] += work_token_usage.get('successful_requests', 0)
-                    
-                    # If any work has failed status, mark aggregated as failed
-                    if work_token_usage.get('status') == 'failed':
-                        aggregated_token_usage['status'] = 'failed'
+                    # Note: token_usage doesn't need status field, result already has status
             
             # Only return if we have meaningful data
             if has_token_usage:

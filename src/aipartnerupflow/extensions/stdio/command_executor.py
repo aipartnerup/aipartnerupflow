@@ -67,6 +67,9 @@ class CommandExecutor(BaseTask):
         "Execute system commands"
     ]
     
+    # Cancellation support: Not implemented (could be added by checking cancellation_checker during execution)
+    cancelable: bool = False
+    
     @property
     def type(self) -> str:
         """Extension type identifier for categorization"""

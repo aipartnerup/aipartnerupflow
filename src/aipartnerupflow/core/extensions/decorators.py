@@ -124,10 +124,18 @@ def _register_extension(
         def default_factory(inputs: Dict[str, Any]) -> Any:
             try:
                 # Try to instantiate with **inputs (for classes like CrewManager)
+                # This allows passing task_id and other kwargs
                 return cls(**inputs)
             except TypeError:
-                # Fallback to inputs parameter (for classes like StdioExecutor)
-                return cls(inputs=inputs)
+                # Fallback: separate inputs from other kwargs
+                # Extract 'inputs' key if present, otherwise use all as inputs
+                executor_inputs = inputs.pop('inputs', inputs) if 'inputs' in inputs else inputs
+                # Try with inputs parameter and remaining kwargs
+                try:
+                    return cls(inputs=executor_inputs, **inputs)
+                except TypeError:
+                    # Final fallback: just inputs parameter
+                    return cls(inputs=executor_inputs)
         executor_factory = default_factory
     
     # Register extension
