@@ -11,12 +11,15 @@ No complex workflow - just batch execution with atomic semantics.
 
 from typing import Dict, Any, Optional, Type
 from aipartnerupflow.extensions.crewai.types import BatchState
+from aipartnerupflow.core.base import BaseTask
+from aipartnerupflow.core.extensions.decorators import executor_register
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-class BatchManager:
+@executor_register()
+class BatchManager(BaseTask):
     """
     BatchManager class for atomic execution of multiple crews (batch container)
     
@@ -43,30 +46,29 @@ class BatchManager:
     examples: list[str] = ["Execute multiple crews as a batch"]
     works: Dict[str, Any] = {}
     
+    @property
+    def type(self) -> str:
+        """Extension type identifier for categorization"""
+        return "crewai"
+    
     def __init__(self, **kwargs: Any):
         """Initialize BatchManager"""
-        self.inputs: Dict[str, Any] = {}
-        self.storage = None
-        self.event_queue = None
-        self.context = None
-        self.init(**kwargs)
+        # Initialize BaseTask first
+        inputs = kwargs.pop("inputs", {})
+        super().__init__(inputs=inputs, **kwargs)
+        
+        # Additional BatchManager-specific initialization
+        self.storage = kwargs.get("storage")
+        self.works = kwargs.get("works", {})
     
     def init(self, **kwargs: Any) -> None:
         """Initialize batch manager with configuration"""
-        if "id" in kwargs:
-            self.id = kwargs["id"]
-        if "name" in kwargs:
-            self.name = kwargs["name"]
-        if "description" in kwargs:
-            self.description = kwargs["description"]
-        if "tags" in kwargs:
-            self.tags = kwargs["tags"]
-        if "examples" in kwargs:
-            self.examples = kwargs["examples"]
+        # Call parent init first to handle common properties
+        super().init(**kwargs)
+        
+        # Handle BatchManager-specific properties
         if "works" in kwargs:
             self.works = kwargs["works"]
-        if "inputs" in kwargs:
-            self.inputs = kwargs["inputs"]
         if "storage" in kwargs:
             self.storage = kwargs["storage"]
         if "event_queue" in kwargs:
