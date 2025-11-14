@@ -4,7 +4,8 @@ Tasks command for managing and querying tasks
 import typer
 import json
 import time
-from typing import Optional, List
+import asyncio
+from typing import Optional, List, Coroutine, Any
 from aipartnerupflow.core.execution.task_executor import TaskExecutor
 from aipartnerupflow.core.utils.logger import get_logger
 from rich.console import Console
@@ -16,6 +17,45 @@ logger = get_logger(__name__)
 
 app = typer.Typer(name="tasks", help="Manage and query tasks")
 console = Console()
+
+
+def run_async_safe(coro: Coroutine[Any, Any, Any]) -> Any:
+    """
+    Safely run async coroutine, handling both cases:
+    - No event loop running: use asyncio.run()
+    - Event loop already running: create task and wait
+    
+    This is needed for CLI commands that may be called from test environments
+    where an event loop is already running.
+    
+    Args:
+        coro: Coroutine to run
+        
+    Returns:
+        Result of the coroutine
+    """
+    try:
+        # Check if event loop is already running
+        loop = asyncio.get_running_loop()
+        # Event loop is running, we need to run in a new thread or use nest_asyncio
+        # For CLI commands, we'll use a workaround: create a new event loop in a thread
+        import concurrent.futures
+        import threading
+        
+        def run_in_thread():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(coro)
+            finally:
+                new_loop.close()
+        
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(run_in_thread)
+            return future.result()
+    except RuntimeError:
+        # No event loop running, safe to use asyncio.run()
+        return asyncio.run(coro)
 
 
 @app.command()
@@ -63,7 +103,7 @@ def list(
         for task_id in running_task_ids[:limit]:
             try:
                 # TaskRepository.get_task_by_id is async, but works with sync sessions too
-                task = asyncio.run(get_task_safe(task_id))
+                task = run_async_safe(get_task_safe(task_id))
                 if task:
                     # Apply user_id filter if specified
                     if user_id and task.user_id != user_id:
@@ -145,7 +185,7 @@ def status(
             is_running = task_executor.is_task_running(task_id)
             
             try:
-                task = asyncio.run(get_task_safe(task_id))
+                task = run_async_safe(get_task_safe(task_id))
                 
                 if task:
                     statuses.append({
@@ -242,7 +282,7 @@ def count(
             
             for task_id in running_task_ids:
                 try:
-                    task = asyncio.run(get_task_safe(task_id))
+                    task = run_async_safe(get_task_safe(task_id))
                     if task and task.user_id == user_id:
                         count += 1
                 except Exception:
@@ -289,7 +329,7 @@ def cancel(
                 # Call TaskExecutor.cancel_task() which handles:
                 # 1. Calling executor.cancel() if executor supports cancellation
                 # 2. Updating database with cancelled status and token_usage
-                cancel_result = asyncio.run(task_executor.cancel_task(task_id, error_message))
+                cancel_result = run_async_safe(task_executor.cancel_task(task_id, error_message))
                 
                 # Add task_id to result
                 cancel_result["task_id"] = task_id
@@ -309,7 +349,13 @@ def cancel(
         typer.echo(json.dumps(results, indent=2))
         
         # Check if any cancellation failed
-        failed = any(r.get("status") in ["error", "failed"] for r in results)
+        # Note: "failed" status for already completed/cancelled tasks is acceptable (not an error)
+        # Only treat actual errors as failures
+        failed = any(
+            r.get("status") == "error" or 
+            (r.get("status") == "failed" and "not found" in r.get("message", "").lower())
+            for r in results
+        )
         if failed:
             raise typer.Exit(1)
         
@@ -367,7 +413,7 @@ def watch(
             
             for tid in task_ids:
                 is_running = task_executor.is_task_running(tid)
-                task = asyncio.run(get_task_safe(tid))
+                task = run_async_safe(get_task_safe(tid))
                 
                 if task:
                     status_style = {
@@ -425,7 +471,7 @@ def watch(
                     # Check if all tasks are finished
                     if not all_tasks:
                         # For single task, check if it's finished
-                        task = asyncio.run(get_task_safe(task_id))
+                        task = run_async_safe(get_task_safe(task_id))
                         if task and task.status in ["completed", "failed", "cancelled"]:
                             typer.echo(f"\nTask {task_id} finished with status: {task.status}")
                             break

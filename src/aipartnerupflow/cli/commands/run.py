@@ -5,15 +5,53 @@ Run command for executing flows
 import typer
 import json
 import uuid
-from typing import Optional, List, Dict, Any
+import asyncio
+from typing import Optional, List, Dict, Any, Coroutine
 from pathlib import Path
 from aipartnerupflow.core.utils.logger import get_logger
 from aipartnerupflow.core.execution.task_executor import TaskExecutor
-import asyncio
 
 logger = get_logger(__name__)
 
 app = typer.Typer(name="run", help="Run a flow")
+
+
+def run_async_safe(coro: Coroutine) -> Any:
+    """
+    Safely run async coroutine, handling both cases:
+    - No event loop running: use asyncio.run()
+    - Event loop already running: create task and wait
+    
+    This is needed for CLI commands that may be called from test environments
+    where an event loop is already running.
+    
+    Args:
+        coro: Coroutine to run
+        
+    Returns:
+        Result of the coroutine
+    """
+    try:
+        # Check if event loop is already running
+        loop = asyncio.get_running_loop()
+        # Event loop is running, we need to run in a new thread or use nest_asyncio
+        # For CLI commands, we'll use a workaround: create a new event loop in a thread
+        import concurrent.futures
+        
+        def run_in_thread():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(coro)
+            finally:
+                new_loop.close()
+        
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(run_in_thread)
+            return future.result()
+    except RuntimeError:
+        # No event loop running, safe to use asyncio.run()
+        return asyncio.run(coro)
 
 
 def _group_tasks_by_root(tasks: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
@@ -227,7 +265,7 @@ def flow(
                             results.append(result)
                         return results
                     
-                    all_results = asyncio.run(run_all_groups())
+                    all_results = run_async_safe(run_all_groups())
                 except Exception as e:
                     logger.error(f"Background task execution failed: {str(e)}", exc_info=True)
             
@@ -284,7 +322,7 @@ def flow(
                     
                     for root_task_id in root_task_ids:
                         is_running = task_executor.is_task_running(root_task_id)
-                        task = asyncio.run(task_repository.get_task_by_id(root_task_id))
+                        task = run_async_safe(task_repository.get_task_by_id(root_task_id))
                         
                         if task:
                             status_style = {
@@ -325,7 +363,7 @@ def flow(
                             # Check if all tasks are finished
                             all_finished = True
                             for root_task_id in root_task_ids:
-                                task = asyncio.run(task_repository.get_task_by_id(root_task_id))
+                                task = run_async_safe(task_repository.get_task_by_id(root_task_id))
                                 if task and task.status not in ["completed", "failed", "cancelled"]:
                                     all_finished = False
                                     break
@@ -357,7 +395,7 @@ def flow(
                         root_ids.append(execution_result["root_task_id"])
                 return results, root_ids
             
-            all_results, all_root_task_ids = asyncio.run(execute_all_groups())
+            all_results, all_root_task_ids = run_async_safe(execute_all_groups())
             
             # Format result
             if len(all_results) == 1:
@@ -383,7 +421,7 @@ def flow(
                             task_model_class=get_task_model_class()
                         )
                         
-                        root_task = asyncio.run(
+                        root_task = run_async_safe(
                             task_repository.get_task_by_id(execution_result["root_task_id"])
                         )
                         

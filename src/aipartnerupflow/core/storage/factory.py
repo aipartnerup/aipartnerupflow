@@ -143,6 +143,17 @@ def get_default_session(
     return _default_session
 
 
+def set_default_session(session: Union[Session, AsyncSession]):
+    """
+    Set default session (mainly for testing)
+    
+    Args:
+        session: Session to set as default
+    """
+    global _default_session
+    _default_session = session
+
+
 def reset_default_session():
     """Reset default session (mainly for testing)"""
     global _default_session

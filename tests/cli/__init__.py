@@ -1,0 +1,4 @@
+"""
+CLI tests for aipartnerupflow
+"""
+

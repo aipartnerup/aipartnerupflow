@@ -7,6 +7,7 @@ Provides database session factory with default DuckDB (embedded, zero-config) an
 from aipartnerupflow.core.storage.factory import (
     create_session,
     get_default_session,
+    set_default_session,
     reset_default_session,
     # Backward compatibility (deprecated)
     create_storage,
@@ -16,6 +17,7 @@ from aipartnerupflow.core.storage.factory import (
 __all__ = [
     "create_session",
     "get_default_session",
+    "set_default_session",
     "reset_default_session",
     # Backward compatibility (deprecated)
     "create_storage",
