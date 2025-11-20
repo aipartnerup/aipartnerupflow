@@ -47,6 +47,14 @@ check_pypi_uploaded() {
     pip index versions "${PROJECT_NAME}" 2>/dev/null | grep -q "${VERSION}" && return 0 || return 1
 }
 
+check_release_exists() {
+    # Check if GitHub release exists using GitHub CLI
+    if command -v gh &> /dev/null; then
+        gh release view "${TAG}" &>/dev/null && return 0 || return 1
+    fi
+    return 1  # If gh not available, assume release doesn't exist
+}
+
 # Function to ask yes/no with default
 ask_yn() {
     local prompt="$1"
@@ -244,13 +252,104 @@ if [ "$SKIP_TAG" = false ]; then
         if ask_yn "Push tag to remote?" "y"; then
             git push origin "${TAG}"
             echo -e "${GREEN}✅ Tag pushed to remote${NC}"
-            echo -e "${CYAN}   You can now create GitHub Release at:${NC}"
-            echo -e "${CYAN}   https://github.com/aipartnerup/${PROJECT_NAME}/releases/new${NC}"
         else
             echo -e "${YELLOW}⚠️  Tag not pushed. Push manually with: git push origin ${TAG}${NC}"
         fi
     else
         echo -e "${YELLOW}⚠️  Skipped tag creation${NC}"
+    fi
+fi
+echo ""
+
+# Step 6.5: Create GitHub Release
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}Step 6.5: Create GitHub Release${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+# Check if GitHub CLI is available
+if command -v gh &> /dev/null; then
+    # Check if release already exists
+    if check_release_exists; then
+        echo -e "${GREEN}✅ Release ${TAG} already exists${NC}"
+        if ask_yn "Update existing release?" "n"; then
+            SKIP_RELEASE=false
+        else
+            SKIP_RELEASE=true
+        fi
+    else
+        SKIP_RELEASE=false
+    fi
+    
+    if [ "$SKIP_RELEASE" = false ]; then
+        if ask_yn "Create GitHub Release ${TAG}?" "y"; then
+            # Extract release notes from CHANGELOG.md
+            RELEASE_NOTES=""
+            if [ -f "CHANGELOG.md" ]; then
+                # Extract the section for this version
+                # Pattern: ## [VERSION] - DATE ... until next ## or end of file
+                RELEASE_NOTES=$(awk "
+                    /^## \[${VERSION}\]/ {found=1; next}
+                    found && /^## \[/ {exit}
+                    found {print}
+                " CHANGELOG.md)
+                
+                # Trim leading/trailing whitespace
+                RELEASE_NOTES=$(echo "$RELEASE_NOTES" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                
+                if [ -z "$RELEASE_NOTES" ]; then
+                    echo -e "${YELLOW}⚠️  Could not find version ${VERSION} in CHANGELOG.md${NC}"
+                    RELEASE_NOTES="Release version ${VERSION}
+
+See [CHANGELOG.md](CHANGELOG.md) for details."
+                else
+                    echo -e "${GREEN}✅ Extracted release notes from CHANGELOG.md${NC}"
+                fi
+            else
+                echo -e "${YELLOW}⚠️  CHANGELOG.md not found${NC}"
+                RELEASE_NOTES="Release version ${VERSION}"
+            fi
+            
+            # Create temporary file for release notes (gh release create needs file or stdin)
+            NOTES_FILE=$(mktemp)
+            echo "$RELEASE_NOTES" > "$NOTES_FILE"
+            
+            echo -e "${YELLOW}Creating GitHub Release...${NC}"
+            if gh release create "${TAG}" \
+                --title "Release ${VERSION}" \
+                --notes-file "$NOTES_FILE" \
+                --repo "aipartnerup/${PROJECT_NAME}"; then
+                echo -e "${GREEN}✅ GitHub Release created successfully${NC}"
+                echo -e "${CYAN}   https://github.com/aipartnerup/${PROJECT_NAME}/releases/tag/${TAG}${NC}"
+            else
+                echo -e "${RED}❌ Failed to create GitHub Release${NC}"
+                echo -e "${YELLOW}   You may need to authenticate: gh auth login${NC}"
+                echo -e "${YELLOW}   Or check your GitHub permissions${NC}"
+            fi
+            
+            # Clean up temporary file
+            rm -f "$NOTES_FILE"
+        else
+            echo -e "${YELLOW}⚠️  Skipped GitHub Release creation${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}⚠️  GitHub CLI (gh) not found${NC}"
+    echo -e "${YELLOW}   Install with: brew install gh (macOS) or visit https://cli.github.com/${NC}"
+    echo -e "${CYAN}   Create release manually at:${NC}"
+    echo -e "${CYAN}   https://github.com/aipartnerup/${PROJECT_NAME}/releases/new${NC}"
+    if [ -f "CHANGELOG.md" ]; then
+        # Show a preview of what would be in the release notes
+        PREVIEW=$(awk "
+            /^## \[${VERSION}\]/ {found=1; next}
+            found && /^## \[/ {exit}
+            found {print}
+        " CHANGELOG.md | head -20)
+        if [ -n "$PREVIEW" ]; then
+            echo -e "${CYAN}   Release notes preview from CHANGELOG.md:${NC}"
+            echo "$PREVIEW" | sed 's/^/     /'
+        else
+            echo -e "${CYAN}   (Could not extract from CHANGELOG.md)${NC}"
+        fi
     fi
 fi
 echo ""
@@ -310,9 +409,12 @@ echo -e "  Version:     ${CYAN}${VERSION}${NC}"
 echo -e "  Tag:         ${CYAN}${TAG}${NC}"
 echo ""
 
-if check_tag_exists; then
+if check_release_exists; then
     echo -e "  ${GREEN}✅${NC} GitHub Release:"
     echo -e "     https://github.com/aipartnerup/${PROJECT_NAME}/releases/tag/${TAG}"
+elif check_tag_exists; then
+    echo -e "  ${YELLOW}⚠️${NC}  GitHub Release: Tag exists but release not created"
+    echo -e "     Create at: https://github.com/aipartnerup/${PROJECT_NAME}/releases/new"
 else
     echo -e "  ${YELLOW}⚠️${NC}  GitHub Release: Not created yet"
     echo -e "     Create at: https://github.com/aipartnerup/${PROJECT_NAME}/releases/new"
