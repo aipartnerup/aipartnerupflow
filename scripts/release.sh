@@ -1,7 +1,7 @@
 #!/bin/bash
 # Interactive release script for aipartnerupflow
 # Usage: ./scripts/release.sh [version]
-# Example: ./scripts/release.sh 0.1.0
+# Example: ./scripts/release.sh 0.2.0
 
 # Note: set -e is disabled to allow step-by-step execution
 # Individual steps will handle their own error handling

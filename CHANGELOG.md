@@ -96,8 +96,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite with pytest fixtures
 - Modular architecture separating core from optional features
 
-### Notes
-- Project is currently in active development
-- No official release has been made yet
-- Breaking changes may occur before v0.1.0 release
-

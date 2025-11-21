@@ -31,7 +31,7 @@ Get the agent card describing the service capabilities.
   "name": "aipartnerupflow",
   "description": "Agent workflow orchestration and execution platform",
   "url": "http://localhost:8000",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "capabilities": {
     "streaming": true,
     "push_notifications": true
@@ -574,7 +574,7 @@ Check system health status.
   "id": "health-request-1",
   "result": {
     "status": "healthy",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "uptime": 3600
   }
 }

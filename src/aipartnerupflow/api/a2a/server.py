@@ -162,7 +162,7 @@ def create_a2a_server(
         name="aipartnerupflow",
         description="Agent workflow orchestration and execution platform",
         url=base_url or "http://localhost:8000",  # Default URL if None
-        version="0.1.0",
+        version="0.2.0",
         default_input_modes=["data"],
         default_output_modes=["data"],
         capabilities=AgentCapabilities(streaming=True, push_notifications=True),

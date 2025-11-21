@@ -493,7 +493,7 @@ python -m build --wheel
 
 ```bash
 # Install from local build
-pip install dist/aipartnerupflow-0.1.0-py3-none-any.whl
+pip install dist/aipartnerupflow-0.2.0-py3-none-any.whl
 ```
 
 ## Contributing

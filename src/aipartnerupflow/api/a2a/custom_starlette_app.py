@@ -807,7 +807,7 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         return {
             "status": "healthy",
             "message": "aipartnerupflow is healthy",
-            "version": "0.1.0",
+            "version": "0.2.0",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "running_tasks_count": 0,  # TODO: Implement actual task count
         }
