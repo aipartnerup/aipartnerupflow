@@ -319,6 +319,43 @@ aipartnerupflow tasks cancel task-123 task-456 task-789
 aipartnerupflow tasks cancel task-123 --force
 ```
 
+### Copy Tasks
+
+Create a copy of a task tree for re-execution. This is useful for retrying failed tasks or re-running completed tasks.
+
+```bash
+# Copy a task tree (basic usage)
+aipartnerupflow tasks copy task-123
+
+# Copy and save to file
+aipartnerupflow tasks copy task-123 --output /path/to/copied_task.json
+```
+
+**What gets copied:**
+- The original task and all its children
+- All tasks that depend on the original task (including transitive dependencies)
+- Automatically handles failed leaf nodes (filters out pending dependents)
+
+**What happens:**
+- New task IDs are generated for all copied tasks
+- All execution fields are reset (status="pending", progress=0.0, result=null)
+- The original task's `has_copy` flag is set to `true`
+- Copied tasks are linked to the original via `original_task_id` field
+
+**Use case:**
+```bash
+# 1. Original task failed
+aipartnerupflow tasks status task-123
+# Status: failed
+
+# 2. Copy the task tree
+aipartnerupflow tasks copy task-123
+# Returns: new_task_id (e.g., task-copy-xyz-789)
+
+# 3. Execute the copied task
+aipartnerupflow run flow --tasks '[{"id": "task-copy-xyz-789", ...}]'
+```
+
 ### API Server Management
 
 ```bash

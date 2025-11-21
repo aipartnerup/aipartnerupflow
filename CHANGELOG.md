@@ -13,7 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Single task tree validation ensuring all tasks are in the same tree structure
   - Validation that only one root task exists
   - Verification that all tasks are reachable from root task via parent_id chain
+  - Dependent task inclusion validation (ensures all tasks that depend on tasks in the tree are included)
   - Comprehensive test coverage for circular dependency scenarios
+
+- **Task Copy Functionality**
+  - `TaskCreator.create_task_copy()` method for creating executable copies of task trees
+  - Automatic inclusion of dependent tasks (including transitive dependencies) when copying
+  - Special handling for failed leaf nodes (filters out pending dependents)
+  - Minimal subtree construction to include only required tasks
+  - Task copy fields in `TaskModel`: `original_task_id` (links copy to original) and `has_copy` (indicates if task has copies)
+  - API endpoint `tasks.copy` via JSON-RPC `/tasks` endpoint
+  - CLI command `tasks copy <task_id>` for copying task trees
+  - Comprehensive test coverage for task copy functionality
 
 ## [0.1.0] - 2025-11-19
 

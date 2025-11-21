@@ -293,6 +293,64 @@ Delete a task (marks as deleted).
 }
 ```
 
+### `tasks.copy`
+
+Create a copy of a task tree for re-execution.
+
+This method creates a new executable copy of an existing task tree, including:
+- The original task and all its children
+- All tasks that depend on the original task (including transitive dependencies)
+- Automatically handles failed leaf nodes (filters out pending dependents)
+
+The copied tasks are linked to the original task via `original_task_id` field. All execution-specific fields (status, result, progress, etc.) are reset to initial values.
+
+**Method:** `tasks.copy`
+
+**Parameters:**
+- `task_id` (string, required): ID of the task to copy (can be root or any task in tree)
+
+**Example Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.copy",
+  "params": {
+    "task_id": "task-abc-123"
+  },
+  "id": "copy-request-1"
+}
+```
+
+**Example Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "copy-request-1",
+  "result": {
+    "id": "task-copy-xyz-789",
+    "name": "Original Task Name",
+    "original_task_id": "task-abc-123",
+    "status": "pending",
+    "progress": 0.0,
+    "children": [
+      {
+        "id": "child-copy-456",
+        "name": "Child Task",
+        "original_task_id": "task-abc-123",
+        "status": "pending",
+        "progress": 0.0
+      }
+    ]
+  }
+}
+```
+
+**Notes:**
+- The copied task tree has new task IDs but preserves the original structure
+- All execution fields are reset (status="pending", progress=0.0, result=null)
+- The original task's `has_copy` flag is set to `true`
+- Use the returned task tree's root ID to execute the copied tasks
+
 ### `tasks.detail`
 
 Get detailed task information (same as `tasks.get`).

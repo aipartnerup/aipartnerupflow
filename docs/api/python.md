@@ -382,6 +382,66 @@ tasks = [
 tree = await creator.create_task_tree_from_array(tasks)
 ```
 
+**Validation**:
+- Detects circular dependencies using DFS algorithm
+- Ensures all tasks form a single task tree (exactly one root task)
+- Verifies all tasks are reachable from root task via parent_id chain
+- Validates that all dependent tasks are included in the input array
+
+#### `create_task_copy(original_task)`
+
+Create a copy of an existing task tree for re-execution.
+
+This method creates a new executable copy of a task tree, including:
+- The original task and all its children
+- All tasks that depend on the original task (including transitive dependencies)
+- Automatically handles failed leaf nodes (filters out pending dependents)
+
+**Parameters**:
+- `original_task` (TaskModel): The task to copy (can be root or any task in tree)
+
+**Returns**: `TaskTreeNode` - New task tree with copied tasks
+
+**Example**:
+```python
+from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+
+# Get original task
+original_task = await task_repository.get_task_by_id("task-123")
+
+# Create copy
+task_creator = TaskCreator(db_session)
+new_tree = await task_creator.create_task_copy(original_task)
+
+# Execute the copied task tree
+result = await task_manager.distribute_task_tree(new_tree)
+```
+
+**What gets copied**:
+- Task structure (parent-child relationships)
+- Task definitions (name, code, inputs, schemas, params, dependencies)
+- All dependent tasks (direct and transitive)
+- Minimal subtree containing only required tasks
+
+**What gets reset**:
+- Task IDs (new IDs generated)
+- Status (reset to "pending")
+- Progress (reset to 0.0)
+- Result (reset to None)
+- Error (reset to None)
+- Execution timestamps (started_at, completed_at)
+- Token usage counters (token_success, token_failed)
+
+**What gets preserved**:
+- Task definitions (name, code, inputs, schemas, params)
+- User and product associations (user_id, product_id)
+- Priority settings
+- Dependencies structure
+
+**Metadata**:
+- `original_task_id`: Links copied task to original task's root ID
+- `has_copy`: Set to `true` on all original tasks that were copied
+
 ## TaskModel
 
 Database model for tasks.
@@ -406,6 +466,8 @@ Database model for tasks.
 - `started_at` (DateTime, optional): Start timestamp
 - `updated_at` (DateTime): Update timestamp
 - `completed_at` (DateTime, optional): Completion timestamp
+- `original_task_id` (str, optional): ID of original task (for copied tasks)
+- `has_copy` (bool): Whether this task has been copied (default: False)
 
 ### Methods
 

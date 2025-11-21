@@ -36,7 +36,7 @@ The current architecture matches the design described in [overview.md](../../arc
 
 ### Task Tree Dependent Validation
 
-**Status**: ✅ **COMPLETED** (except Task Copy)
+**Status**: ✅ **COMPLETED**
 
 #### ✅ Completed
 - Circular dependency detection using DFS algorithm
@@ -48,15 +48,16 @@ The current architecture matches the design described in [overview.md](../../arc
   - ✅ Transitive dependency detection
   - ✅ Validation step to check dependent task inclusion
   - ✅ Comprehensive unit tests for dependent task inclusion validation
-
-#### ⏳ Pending Implementation
-1. **Task Copy Functionality**
-   - Task tree re-execution support
-   - Automatically include dependent tasks when copying
-   - Handle transitive dependencies
-   - Special handling for failed leaf nodes
-   - Build minimal subtree containing required tasks
-   - Link copied tasks to original tasks
+- **Task Copy Functionality**
+  - ✅ Task tree re-execution support (`TaskCreator.create_task_copy()`)
+  - ✅ Automatically include dependent tasks when copying
+  - ✅ Handle transitive dependencies
+  - ✅ Special handling for failed leaf nodes
+  - ✅ Build minimal subtree containing required tasks
+  - ✅ Link copied tasks to original tasks via `original_task_id` field
+  - ✅ API endpoint `tasks.copy` via JSON-RPC
+  - ✅ CLI command `tasks copy <task_id>`
+  - ✅ Comprehensive test coverage
 
 ### Task Queue and Scheduling System
 
