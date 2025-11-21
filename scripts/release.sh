@@ -328,25 +328,119 @@ step6_git_tag() {
     return 0
 }
 
+# Function to get GitHub token from various sources
+get_github_token() {
+    # 1. Check environment variable
+    if [ -n "$GITHUB_TOKEN" ]; then
+        echo "$GITHUB_TOKEN"
+        return 0
+    fi
+    
+    # 2. Check git config for token
+    local token=$(git config --global github.token 2>/dev/null || git config github.token 2>/dev/null)
+    if [ -n "$token" ]; then
+        echo "$token"
+        return 0
+    fi
+    
+    # 3. Try to get from GitHub CLI (if authenticated)
+    if command -v gh &> /dev/null && gh auth status &>/dev/null; then
+        token=$(gh auth token 2>/dev/null)
+        if [ -n "$token" ]; then
+            echo "$token"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+# Function to create GitHub release using API
+create_github_release_api() {
+    local tag="$1"
+    local title="$2"
+    local notes_file="$3"
+    local token="$4"
+    local repo="$5"
+    
+    local api_url="https://api.github.com/repos/${repo}/releases"
+    
+    # Create JSON payload
+    local json_payload=$(cat <<EOF
+{
+  "tag_name": "${tag}",
+  "name": "${title}",
+  "body": $(jq -Rs . < "$notes_file"),
+  "draft": false,
+  "prerelease": false
+}
+EOF
+)
+    
+    # Create release using curl
+    local response=$(curl -s -w "\n%{http_code}" -X POST \
+        -H "Authorization: token ${token}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        -H "Content-Type: application/json" \
+        -d "${json_payload}" \
+        "${api_url}")
+    
+    local http_code=$(echo "$response" | tail -n1)
+    local body=$(echo "$response" | sed '$d')
+    
+    if [ "$http_code" = "201" ]; then
+        return 0
+    else
+        echo "$body" >&2
+        return 1
+    fi
+}
+
 step6_5_create_github_release() {
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BLUE}Step 6.5: Create GitHub Release${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
+    SKIP_RELEASE=false
+    USE_API=false
+    GITHUB_TOKEN=""
+    
+    # Try to get GitHub token
+    if GITHUB_TOKEN=$(get_github_token); then
+        USE_API=true
+        echo -e "${GREEN}✅ Found GitHub authentication token${NC}"
+    fi
+    
     # Check if GitHub CLI is available
     if command -v gh &> /dev/null; then
         # Verify GitHub CLI authentication
-        if ! gh auth status &>/dev/null; then
-            echo -e "${YELLOW}⚠️  GitHub CLI not authenticated${NC}"
-            echo -e "${CYAN}   Please run: gh auth login${NC}"
-            echo -e "${CYAN}   This will open a browser for authentication${NC}"
+        if gh auth status &>/dev/null; then
+            SKIP_RELEASE=false
+            USE_API=false  # Prefer GitHub CLI if authenticated
+            echo -e "${GREEN}✅ GitHub CLI is authenticated${NC}"
+        elif [ "$USE_API" = false ]; then
+            echo -e "${YELLOW}⚠️  GitHub authentication required for creating releases${NC}"
+            echo ""
+            echo -e "${CYAN}   Note: SSH key authentication (for git push) is different from${NC}"
+            echo -e "${CYAN}   GitHub API authentication (for creating releases).${NC}"
+            echo ""
+            echo -e "${CYAN}   Quick setup options:${NC}"
+            echo -e "${CYAN}   1. GitHub CLI (recommended, one-time setup):${NC}"
+            echo -e "${CYAN}      gh auth login${NC}"
+            echo -e "${CYAN}      (This will open a browser for authentication)${NC}"
+            echo ""
+            echo -e "${CYAN}   2. Personal Access Token (alternative):${NC}"
+            echo -e "${CYAN}      a) Create token: https://github.com/settings/tokens${NC}"
+            echo -e "${CYAN}      b) Set environment variable:${NC}"
+            echo -e "${CYAN}         export GITHUB_TOKEN=your_token_here${NC}"
+            echo -e "${CYAN}      c) Or set git config:${NC}"
+            echo -e "${CYAN}         git config --global github.token your_token_here${NC}"
+            echo ""
             if ask_yn "Continue anyway? (Release creation will fail)" "n"; then
                 SKIP_RELEASE=false
             else
                 SKIP_RELEASE=true
             fi
-        else
-            SKIP_RELEASE=false
         fi
         
         if [ "$SKIP_RELEASE" = false ]; then
@@ -392,21 +486,51 @@ See [CHANGELOG.md](CHANGELOG.md) for details."
                 RELEASE_NOTES="Release version ${VERSION}"
             fi
             
-            # Create temporary file for release notes (gh release create needs file or stdin)
+            # Create temporary file for release notes
             NOTES_FILE=$(mktemp)
             echo "$RELEASE_NOTES" > "$NOTES_FILE"
             
             echo -e "${YELLOW}Creating GitHub Release...${NC}"
-            if gh release create "${TAG}" \
-                --title "Release ${VERSION}" \
-                --notes-file "$NOTES_FILE" \
-                --repo "aipartnerup/${PROJECT_NAME}"; then
-                echo -e "${GREEN}✅ GitHub Release created successfully${NC}"
-                echo -e "${CYAN}   https://github.com/aipartnerup/${PROJECT_NAME}/releases/tag/${TAG}${NC}"
-            else
+            
+            # Try to create release
+            SUCCESS=false
+            if [ "$USE_API" = true ] && [ -n "$GITHUB_TOKEN" ]; then
+                # Use GitHub API with token
+                if command -v jq &> /dev/null; then
+                    if create_github_release_api "${TAG}" "Release ${VERSION}" "$NOTES_FILE" "$GITHUB_TOKEN" "aipartnerup/${PROJECT_NAME}"; then
+                        echo -e "${GREEN}✅ GitHub Release created successfully (via API)${NC}"
+                        echo -e "${CYAN}   https://github.com/aipartnerup/${PROJECT_NAME}/releases/tag/${TAG}${NC}"
+                        SUCCESS=true
+                    else
+                        echo -e "${RED}❌ Failed to create GitHub Release via API${NC}"
+                    fi
+                else
+                    echo -e "${YELLOW}⚠️  jq not found, falling back to GitHub CLI${NC}"
+                    USE_API=false
+                fi
+            fi
+            
+            # Fallback to GitHub CLI
+            if [ "$SUCCESS" = false ] && [ "$USE_API" = false ] && command -v gh &> /dev/null && gh auth status &>/dev/null; then
+                if gh release create "${TAG}" \
+                    --title "Release ${VERSION}" \
+                    --notes-file "$NOTES_FILE" \
+                    --repo "aipartnerup/${PROJECT_NAME}"; then
+                    echo -e "${GREEN}✅ GitHub Release created successfully (via GitHub CLI)${NC}"
+                    echo -e "${CYAN}   https://github.com/aipartnerup/${PROJECT_NAME}/releases/tag/${TAG}${NC}"
+                    SUCCESS=true
+                else
+                    echo -e "${RED}❌ Failed to create GitHub Release${NC}"
+                    echo -e "${YELLOW}   You may need to authenticate: gh auth login${NC}"
+                    echo -e "${YELLOW}   Or check your GitHub permissions${NC}"
+                fi
+            elif [ "$SUCCESS" = false ]; then
                 echo -e "${RED}❌ Failed to create GitHub Release${NC}"
-                echo -e "${YELLOW}   You may need to authenticate: gh auth login${NC}"
-                echo -e "${YELLOW}   Or check your GitHub permissions${NC}"
+                echo -e "${YELLOW}   No authentication method available${NC}"
+                echo -e "${CYAN}   Options:${NC}"
+                echo -e "${CYAN}   1. Set GITHUB_TOKEN environment variable${NC}"
+                echo -e "${CYAN}   2. Set git config: git config --global github.token YOUR_TOKEN${NC}"
+                echo -e "${CYAN}   3. Run: gh auth login${NC}"
             fi
             
             # Clean up temporary file
@@ -416,34 +540,74 @@ See [CHANGELOG.md](CHANGELOG.md) for details."
         fi
         fi
     else
-        echo -e "${YELLOW}⚠️  GitHub CLI (gh) not found${NC}"
-        echo ""
-        echo -e "${CYAN}   To install GitHub CLI:${NC}"
-        echo -e "${CYAN}   • macOS:    brew install gh${NC}"
-    echo -e "${CYAN}   • Linux:    See https://github.com/cli/cli/blob/trunk/docs/install_linux.md${NC}"
-    echo -e "${CYAN}     - Debian/Ubuntu: sudo apt install gh${NC}"
-    echo -e "${CYAN}     - Fedora/RHEL:   sudo dnf install gh${NC}"
-        echo -e "${CYAN}     - Arch Linux:     sudo pacman -S github-cli${NC}"
-        echo -e "${CYAN}   • Windows:  See https://cli.github.com/${NC}"
-        echo -e "${CYAN}   • Or visit: https://cli.github.com/${NC}"
-        echo ""
-        echo -e "${CYAN}   After installation, authenticate with:${NC}"
-        echo -e "${CYAN}     gh auth login${NC}"
-        echo ""
-        echo -e "${CYAN}   Create release manually at:${NC}"
-        echo -e "${CYAN}   https://github.com/aipartnerup/${PROJECT_NAME}/releases/new${NC}"
-        if [ -f "CHANGELOG.md" ]; then
-            # Show a preview of what would be in the release notes
-            PREVIEW=$(awk "
-                /^## \[${VERSION}\]/ {found=1; next}
-                found && /^## \[/ {exit}
-                found {print}
-            " CHANGELOG.md | head -20)
-            if [ -n "$PREVIEW" ]; then
-                echo -e "${CYAN}   Release notes preview from CHANGELOG.md:${NC}"
-                echo "$PREVIEW" | sed 's/^/     /'
+        # GitHub CLI not found, try API method
+        if [ "$USE_API" = true ] && [ -n "$GITHUB_TOKEN" ]; then
+            SKIP_RELEASE=false
+            echo -e "${GREEN}✅ Will use GitHub API (GitHub CLI not required)${NC}"
+        else
+            echo -e "${YELLOW}⚠️  GitHub CLI (gh) not found${NC}"
+            echo ""
+            echo -e "${CYAN}   Options to create GitHub Release:${NC}"
+            echo -e "${CYAN}   1. Set GITHUB_TOKEN environment variable:${NC}"
+            echo -e "${CYAN}      export GITHUB_TOKEN=your_token_here${NC}"
+            echo -e "${CYAN}   2. Set git config:${NC}"
+            echo -e "${CYAN}      git config --global github.token YOUR_TOKEN${NC}"
+            echo -e "${CYAN}   3. Install GitHub CLI:${NC}"
+            echo -e "${CYAN}      • macOS:    brew install gh${NC}"
+            echo -e "${CYAN}      • Linux:    See https://github.com/cli/cli/blob/trunk/docs/install_linux.md${NC}"
+            echo -e "${CYAN}      • Windows:  See https://cli.github.com/${NC}"
+            echo ""
+            echo -e "${CYAN}   Create release manually at:${NC}"
+            echo -e "${CYAN}   https://github.com/aipartnerup/${PROJECT_NAME}/releases/new${NC}"
+            if [ -f "CHANGELOG.md" ]; then
+                # Show a preview of what would be in the release notes
+                PREVIEW=$(awk "
+                    /^## \[${VERSION}\]/ {found=1; next}
+                    found && /^## \[/ {exit}
+                    found {print}
+                " CHANGELOG.md | head -20)
+                if [ -n "$PREVIEW" ]; then
+                    echo -e "${CYAN}   Release notes preview from CHANGELOG.md:${NC}"
+                    echo "$PREVIEW" | sed 's/^/     /'
+                else
+                    echo -e "${CYAN}   (Could not extract from CHANGELOG.md)${NC}"
+                fi
+            fi
+            if ask_yn "Continue anyway? (Release creation will fail)" "n"; then
+                SKIP_RELEASE=false
             else
-                echo -e "${CYAN}   (Could not extract from CHANGELOG.md)${NC}"
+                SKIP_RELEASE=true
+            fi
+        fi
+    fi
+    
+    # Check if release already exists (using API if available)
+    if [ "$SKIP_RELEASE" = false ]; then
+        if [ "$USE_API" = true ] && [ -n "$GITHUB_TOKEN" ]; then
+            # Check via API
+            if curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                "https://api.github.com/repos/aipartnerup/${PROJECT_NAME}/releases/tags/${TAG}" \
+                | grep -q '"id"'; then
+                echo -e "${GREEN}✅ Release ${TAG} already exists${NC}"
+                if ask_yn "Update existing release?" "n"; then
+                    SKIP_RELEASE=false
+                else
+                    SKIP_RELEASE=true
+                fi
+            else
+                SKIP_RELEASE=false
+            fi
+        elif command -v gh &> /dev/null && gh auth status &>/dev/null; then
+            # Check via GitHub CLI
+            if check_release_exists; then
+                echo -e "${GREEN}✅ Release ${TAG} already exists${NC}"
+                if ask_yn "Update existing release?" "n"; then
+                    SKIP_RELEASE=false
+                else
+                    SKIP_RELEASE=true
+                fi
+            else
+                SKIP_RELEASE=false
             fi
         fi
     fi
