@@ -306,6 +306,7 @@ JSON-RPC 2.0 format with method-specific parameters:
 - `tasks.delete` - Delete a task
 - `tasks.detail` - Get detailed task information
 - `tasks.tree` - Get task tree structure
+- `tasks.children` - Get child tasks of a parent task
 - `tasks.list` - List tasks with filters
 - `tasks.running.list` - List currently running tasks
 - `tasks.running.status` - Get status of running tasks
@@ -874,6 +875,74 @@ Same as `tasks.get` - returns complete task object.
 - This method is an alias for `tasks.get`
 - Use this method when you need explicit clarity that you're requesting detailed information
 - Returns the same response format as `tasks.get`
+
+### `tasks.children`
+
+**Description:**  
+Retrieves all child tasks of a specified parent task. This method returns a flat list of direct children (not a nested tree structure). Useful for getting immediate children without the full tree hierarchy.
+
+**Method:** `tasks.children`
+
+**Parameters:**
+- `parent_id` (string, required): Parent task ID to get children for. Can also use `task_id` as an alias.
+- `task_id` (string, optional): Alternative parameter name for parent_id (same as `parent_id`)
+
+**Example Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.children",
+  "params": {
+    "parent_id": "task-abc-123"
+  },
+  "id": "children-request-1"
+}
+```
+
+**Example Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "children-request-1",
+  "result": [
+    {
+      "id": "child-task-1",
+      "name": "Child Task 1",
+      "status": "completed",
+      "progress": 1.0,
+      "parent_id": "task-abc-123",
+      "user_id": "user123"
+    },
+    {
+      "id": "child-task-2",
+      "name": "Child Task 2",
+      "status": "in_progress",
+      "progress": 0.5,
+      "parent_id": "task-abc-123",
+      "user_id": "user123"
+    }
+  ]
+}
+```
+
+**Response Fields:**
+Returns an array of task objects, each containing:
+- All standard task fields (id, name, status, progress, user_id, parent_id, etc.)
+- Each task object represents a direct child of the specified parent
+- Tasks are returned in a flat list (not nested)
+
+**Error Cases:**
+- Parent task not found: Returns error with code -32602
+- Missing parent_id: Returns error with code -32602
+- Permission denied: Returns error with code -32001 (for parent task access)
+- Child tasks with permission denied are filtered out (not returned, but no error)
+
+**Notes:**
+- Returns only direct children, not grandchildren or deeper descendants
+- Use `tasks.tree` to get the complete nested tree structure
+- Child tasks are filtered by permission - tasks you cannot access are not returned
+- Returns an empty array if the parent task has no children
+- Useful for pagination or when you only need immediate children
 
 ### `tasks.tree`
 

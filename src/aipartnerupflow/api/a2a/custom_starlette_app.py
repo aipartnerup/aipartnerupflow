@@ -324,6 +324,8 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                     result = await self._handle_task_tree_logic(params, request, request_id)
                 elif method == "tasks.list":
                     result = await self._handle_tasks_list_logic(params, request, request_id)
+                elif method == "tasks.children":
+                    result = await self._handle_task_children_logic(params, request, request_id)
                 # Running task monitoring
                 elif method == "tasks.running.list":
                     result = await self._handle_running_tasks_list_logic(params, request, request_id)
@@ -907,6 +909,7 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         Params:
             user_id: Optional user ID filter (will be checked for permission)
             status: Optional status filter (e.g., "completed", "pending", "in_progress", "failed")
+            root_only: Optional boolean (default: True) - if True, only return root tasks (parent_id is None)
             limit: Optional limit (default: 100)
             offset: Optional offset for pagination (default: 0)
         
@@ -916,6 +919,7 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         try:
             user_id = params.get("user_id")
             status = params.get("status")
+            root_only = params.get("root_only", True)  # Default to True: only show root tasks
             limit = params.get("limit", 100)
             offset = params.get("offset", 0)
             
@@ -934,9 +938,12 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
             
             # Query tasks with filters
+            # If root_only is True, set parent_id to "" to filter for root tasks (parent_id is None)
+            parent_id_filter = "" if root_only else None
             tasks = await task_repository.query_tasks(
                 user_id=user_id,
                 status=status,
+                parent_id=parent_id_filter,
                 limit=limit,
                 offset=offset,
                 order_by="created_at",
@@ -944,13 +951,23 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             )
             
             # Convert to dictionaries and check permissions
+            # Also check if tasks have children for UI optimization
             task_dicts = []
             for task in tasks:
                 # Check permission to access this task
                 try:
                     if task.user_id:
                         self._check_permission(request, task.user_id, "access")
-                    task_dicts.append(task.to_dict())
+                    
+                    task_dict = task.to_dict()
+                    
+                    # Check if task has children (if has_children field is not set or False, check database)
+                    if not task_dict.get("has_children"):
+                        # Quick check: query if there are any child tasks
+                        children = await task_repository.get_child_tasks_by_parent_id(task.id)
+                        task_dict["has_children"] = len(children) > 0
+                    
+                    task_dicts.append(task_dict)
                 except ValueError:
                     # Permission denied, skip this task
                     logger.warning(f"Permission denied for task {task.id}")
@@ -959,6 +976,60 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             
         except Exception as e:
             logger.error(f"Error getting tasks list: {str(e)}", exc_info=True)
+            raise
+
+    async def _handle_task_children_logic(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> list:
+        """
+        Handle task children query - returns child tasks for a given parent task
+        
+        Params:
+            parent_id: Parent task ID (required)
+            task_id: Alternative parameter name for parent_id
+        
+        Returns:
+            List of child tasks
+        """
+        try:
+            parent_id = params.get("parent_id") or params.get("task_id")
+            if not parent_id:
+                raise ValueError("Parent task ID is required. Please provide 'parent_id' or 'task_id' parameter.")
+            
+            # Get database session and create repository
+            db_session = get_default_session()
+            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            
+            # Get parent task to check permission
+            parent_task = await task_repository.get_task_by_id(parent_id)
+            if not parent_task:
+                raise ValueError(f"Parent task {parent_id} not found")
+            
+            # Check permission to access parent task
+            if parent_task.user_id:
+                self._check_permission(request, parent_task.user_id, "access")
+            
+            # Get child tasks
+            children = await task_repository.get_child_tasks_by_parent_id(parent_id)
+            
+            # Convert to dictionaries and check permissions
+            child_dicts = []
+            for child in children:
+                try:
+                    if child.user_id:
+                        self._check_permission(request, child.user_id, "access")
+                    child_dicts.append(child.to_dict())
+                except ValueError:
+                    # Permission denied, skip this child task
+                    logger.warning(f"Permission denied for child task {child.id}")
+            
+            return child_dicts
+            
+        except Exception as e:
+            logger.error(f"Error getting child tasks: {str(e)}", exc_info=True)
             raise
 
     async def _handle_running_tasks_status_logic(

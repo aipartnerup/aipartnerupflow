@@ -35,6 +35,7 @@ def get_example_tasks() -> List[Dict[str, Any]]:
         "dependencies": [],
         "status": "pending",
         "progress": 0.0,
+        "has_children": True,  # Has 3 child tasks: CPU, Memory, Disk
         "schemas": {
             "method": "system_info_executor"
         },
@@ -191,6 +192,7 @@ def get_example_tasks() -> List[Dict[str, Any]]:
         "dependencies": [],
         "status": "pending",
         "progress": 0.0,
+        "has_children": True,  # Has 3 child tasks: tree_child_1, tree_child_2, tree_child_3
         "schemas": {
             "method": "system_info_executor"
         },

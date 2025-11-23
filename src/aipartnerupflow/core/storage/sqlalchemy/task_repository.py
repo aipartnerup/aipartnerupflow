@@ -413,6 +413,7 @@ class TaskRepository:
         self,
         user_id: Optional[str] = None,
         status: Optional[str] = None,
+        parent_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
         order_by: str = "created_at",
@@ -424,6 +425,7 @@ class TaskRepository:
         Args:
             user_id: Optional user ID filter
             status: Optional status filter (e.g., "completed", "pending", "in_progress", "failed")
+            parent_id: Optional parent ID filter. If None, no filter. If empty string "", filter for root tasks (parent_id is None)
             limit: Maximum number of tasks to return (default: 100)
             offset: Number of tasks to skip (default: 0)
             order_by: Field to order by (default: "created_at")
@@ -443,6 +445,15 @@ class TaskRepository:
                 
                 if status is not None:
                     stmt = stmt.filter(self.task_model_class.status == status)
+                
+                # Apply parent_id filter
+                if parent_id is not None:
+                    if parent_id == "":
+                        # Empty string means filter for root tasks (parent_id is None)
+                        stmt = stmt.filter(self.task_model_class.parent_id.is_(None))
+                    else:
+                        # Specific parent_id
+                        stmt = stmt.filter(self.task_model_class.parent_id == parent_id)
                 
                 # Apply ordering
                 order_column = getattr(self.task_model_class, order_by, None)
@@ -465,6 +476,15 @@ class TaskRepository:
                 
                 if status is not None:
                     stmt = stmt.filter(self.task_model_class.status == status)
+                
+                # Apply parent_id filter
+                if parent_id is not None:
+                    if parent_id == "":
+                        # Empty string means filter for root tasks (parent_id is None)
+                        stmt = stmt.filter(self.task_model_class.parent_id.is_(None))
+                    else:
+                        # Specific parent_id
+                        stmt = stmt.filter(self.task_model_class.parent_id == parent_id)
                 
                 # Apply ordering
                 order_column = getattr(self.task_model_class, order_by, None)
