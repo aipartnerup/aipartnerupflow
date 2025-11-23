@@ -5,7 +5,7 @@ Agent executor for A2A protocol that handles task tree execution
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.utils import new_agent_text_message, new_agent_parts_message
-from a2a.types import DataPart
+from a2a.types import DataPart, Task, Artifact, Part
 from a2a.types import TaskStatusUpdateEvent, TaskStatus, TaskState
 import asyncio
 import json
@@ -197,26 +197,83 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             # Get root task result - use actual root task ID from execution result
             final_status = execution_result["status"]
             actual_root_task_id = execution_result["root_task_id"]
-            root_result = {
-                "status": final_status,
-                "progress": execution_result["progress"],
-                "root_task_id": actual_root_task_id,
-                "task_count": len(tasks)
-            }
+            
+            # A2A protocol requires Task object with id matching context.task_id
+            # Use context.task_id if available, otherwise use actual_root_task_id
+            task_id = context.task_id or actual_root_task_id
+            context_id = context.context_id or actual_root_task_id
+            
+            # Get root task from database to create Task object
+            from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            root_task_model = await task_repository.get_task_by_id(actual_root_task_id)
+            
+            if not root_task_model:
+                raise ValueError(f"Root task {actual_root_task_id} not found after execution")
+            
+            # Create A2A Task object with matching task_id
+            # Map TaskModel to A2A Task format
+            task_state = TaskState.completed if final_status == "completed" else TaskState.failed
+            task_status_message = f"Task execution {final_status}"
+            
+            # Create artifacts from execution result
+            # Artifact requires artifact_id and parts (list of Part)
+            artifacts = [
+                Artifact(
+                    artifact_id=str(uuid.uuid4()),
+                    parts=[
+                        Part(
+                            root=DataPart(
+                                kind="data",
+                                data={
+                                    "status": final_status,
+                                    "progress": float(execution_result["progress"]),
+                                    "root_task_id": actual_root_task_id,
+                                    "task_count": len(tasks),
+                                    "result": root_task_model.result
+                                }
+                            )
+                        )
+                    ]
+                )
+            ]
+            
+            # Create Task object with matching task_id
+            a2a_task = Task(
+                id=task_id,  # Must match context.task_id
+                context_id=context_id,
+                kind="task",
+                status=TaskStatus(
+                    state=task_state,
+                    message=new_agent_text_message(task_status_message)
+                ),
+                artifacts=artifacts,
+                metadata={
+                    "root_task_id": actual_root_task_id,
+                    "user_id": root_task_model.user_id
+                } if root_task_model.user_id else {
+                    "root_task_id": actual_root_task_id
+                }
+            )
             
             # Send result as TaskStatusUpdateEvent
             completed_status = TaskStatusUpdateEvent(
-                task_id=actual_root_task_id,  # Use actual root task ID
+                task_id=task_id,  # Use context.task_id
                 context_id=context_id,
                 status=TaskStatus(
-                    state=TaskState.completed if final_status == "completed" else TaskState.failed,
-                    message=new_agent_parts_message([DataPart(data=root_result)])
+                    state=task_state,
+                    message=new_agent_parts_message([DataPart(data={
+                        "status": final_status,
+                        "progress": execution_result["progress"],
+                        "root_task_id": actual_root_task_id,
+                        "task_count": len(tasks)
+                    })])
                 ),
                 final=True
             )
             await event_queue.enqueue_event(completed_status)
             
-            return root_result
+            return a2a_task
             
         except Exception as e:
             logger.error(f"Error in simple mode execution: {str(e)}", exc_info=True)
