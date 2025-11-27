@@ -80,7 +80,11 @@ class TestHandleTaskExecute:
         # Mock TaskExecutor to avoid actual execution
         with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
             mock_executor = Mock()
-            mock_executor.execute_task_tree = AsyncMock(return_value={"status": "completed", "progress": 1.0})
+            mock_executor.execute_task_by_id = AsyncMock(return_value={
+                "status": "started",
+                "progress": 0.0,
+                "root_task_id": sample_task
+            })
             mock_executor_class.return_value = mock_executor
             
             # Mock TaskTracker
@@ -101,7 +105,7 @@ class TestHandleTaskExecute:
         assert "streaming" not in result or result.get("streaming") is False
         assert "webhook_url" not in result
         
-        # Note: execute_task_tree is called via asyncio.create_task in background
+        # Note: execute_task_by_id is called via asyncio.create_task in background
         # We verify the response indicates correct mode instead of checking call args
     
     @pytest.mark.asyncio
@@ -123,7 +127,11 @@ class TestHandleTaskExecute:
         # Mock TaskExecutor to avoid actual execution
         with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
             mock_executor = Mock()
-            mock_executor.execute_task_tree = AsyncMock(return_value={"status": "completed", "progress": 1.0})
+            mock_executor.execute_task_by_id = AsyncMock(return_value={
+                "status": "started",
+                "progress": 0.0,
+                "root_task_id": sample_task
+            })
             mock_executor_class.return_value = mock_executor
             
             # Mock TaskTracker
@@ -164,7 +172,11 @@ class TestHandleTaskExecute:
         # Mock TaskExecutor to avoid actual execution
         with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
             mock_executor = Mock()
-            mock_executor.execute_task_tree = AsyncMock(return_value={"status": "completed", "progress": 1.0})
+            mock_executor.execute_task_by_id = AsyncMock(return_value={
+                "status": "started",
+                "progress": 0.0,
+                "root_task_id": sample_task
+            })
             mock_executor_class.return_value = mock_executor
             
             # Mock TaskTracker
@@ -184,7 +196,7 @@ class TestHandleTaskExecute:
         assert result.media_type == "text/event-stream"
         
         # Verify execution was called with streaming enabled
-        # Note: execute_task_tree is called via asyncio.create_task in background
+        # Note: execute_task_by_id is called via asyncio.create_task in background
         # The context is created before the async task, so we verify the response type
     
     @pytest.mark.asyncio
@@ -206,7 +218,11 @@ class TestHandleTaskExecute:
         # Mock TaskExecutor to avoid actual execution
         with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
             mock_executor = Mock()
-            mock_executor.execute_task_tree = AsyncMock(return_value={"status": "completed", "progress": 1.0})
+            mock_executor.execute_task_by_id = AsyncMock(return_value={
+                "status": "started",
+                "progress": 0.0,
+                "root_task_id": sample_task
+            })
             mock_executor_class.return_value = mock_executor
             
             # Mock TaskTracker
@@ -226,7 +242,7 @@ class TestHandleTaskExecute:
         assert result.media_type == "text/event-stream"
         
         # Verify execution was called with streaming enabled
-        # Note: execute_task_tree is called via asyncio.create_task in background
+        # Note: execute_task_by_id is called via asyncio.create_task in background
         # The context is created before the async task, so we verify the response type
     
     @pytest.mark.asyncio
@@ -272,7 +288,7 @@ class TestHandleTaskExecute:
         }
         request_id = str(uuid.uuid4())
         
-        with pytest.raises(ValueError, match="Task ID is required"):
+        with pytest.raises(ValueError, match="Either task_id or tasks array is required"):
             await task_routes.handle_task_execute(params, mock_request, request_id)
     
     @pytest.mark.asyncio
@@ -298,7 +314,7 @@ class TestHandleTaskExecute:
             # The error should occur when creating WebhookStreamingContext
             with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
                 mock_executor = Mock()
-                mock_executor.execute_task_tree = AsyncMock()
+                mock_executor.execute_task_by_id = AsyncMock()
                 mock_executor_class.return_value = mock_executor
                 
                 with pytest.raises(ValueError, match="webhook_config.url is required"):

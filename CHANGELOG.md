@@ -76,6 +76,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added protocol identification documentation
 
 ### Changed
+- **Unified Task Execution Architecture**
+  - Refactored task execution logic to unify behavior across A2A Protocol and JSON-RPC endpoints
+  - Added `TaskExecutor.execute_task_by_id()` method for executing tasks by ID with automatic dependency handling
+  - Moved dependency collection and subtree building logic from protocol handlers to core `TaskExecutor` layer
+  - Unified execution modes:
+    - **Root task execution**: Executes the entire task tree when a root task is specified
+    - **Child task execution**: Automatically collects all dependencies (including transitive) and executes the task with required dependencies
+  - Both A2A Protocol and JSON-RPC now use the same core execution methods for consistent behavior
+  - Protocol handlers are now thin wrappers around core execution logic, making the system more library-friendly
+  - Improved code reusability and maintainability by centralizing execution logic in `TaskExecutor`
+
 - **CLI Command Improvements**
   - `serve` command now accepts options directly (e.g., `apflow serve --port 8000`) without requiring `start` subcommand
   - `serve start` subcommand still works for backward compatibility

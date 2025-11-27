@@ -1297,9 +1297,12 @@ class TaskRoutes(BaseRouteHandler):
         request_id: str
     ) -> Union[dict, StreamingResponse]:
         """
-        Handle task execution - execute a task by ID
+        Handle task execution - supports both task_id and tasks array
         
         Design:
+        - Supports two execution modes:
+          1. Execute by task_id: Uses TaskExecutor.execute_task_by_id()
+          2. Execute by tasks array: Uses TaskExecutor.execute_tasks()
         - Users can choose one of two response modes: regular POST or SSE
         - Users can optionally request webhook URL callbacks (independent of response mode)
         
@@ -1313,7 +1316,8 @@ class TaskRoutes(BaseRouteHandler):
         - Webhook callbacks are independent of the response mode choice
         
         Params:
-            task_id: Task ID to execute
+            task_id: Optional, Task ID to execute (if provided, uses execute_task_by_id)
+            tasks: Optional, Array of task dictionaries to execute (if provided, uses execute_tasks)
             use_streaming: Optional, if True, use SSE mode (default: False, regular POST mode)
             webhook_config: Optional webhook configuration for push notifications (independent of use_streaming):
                 {
@@ -1349,71 +1353,118 @@ class TaskRoutes(BaseRouteHandler):
         """
         try:
             task_id = params.get("task_id") or params.get("id")
-            if not task_id:
-                raise ValueError("Task ID is required")
-            
+            tasks = params.get("tasks")
             use_streaming = params.get("use_streaming", False)
             webhook_config = params.get("webhook_config")
             
-            # Get database session and create repository
+            # Determine execution mode
+            if tasks and isinstance(tasks, list):
+                # Mode 2: Execute by tasks array
+                execution_mode = "tasks_array"
+                logger.info(f"Executing tasks array mode: {len(tasks)} tasks")
+            elif task_id:
+                # Mode 1: Execute by task_id
+                execution_mode = "task_id"
+                logger.info(f"Executing task_id mode: {task_id}")
+            else:
+                raise ValueError("Either task_id or tasks array is required")
+            
+            # Get database session
             db_session = get_default_session()
-            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
-            
-            # Get task
-            task = await task_repository.get_task_by_id(task_id)
-            if not task:
-                raise ValueError(f"Task {task_id} not found")
-            
-            # Check permission
-            self._check_permission(request, task.user_id, "execute")
-            
-            # Check if task is already running
-            from aipartnerupflow.core.execution.task_tracker import TaskTracker
-            task_tracker = TaskTracker()
-            if task_tracker.is_task_running(task_id):
-                return {
-                    "success": False,
-                    "protocol": "jsonrpc",
-                    "root_task_id": task_id,
-                    "status": "already_running",
-                    "message": f"Task {task_id} is already running"
-                }
-            
-            # Build task tree starting from this task
-            task_tree = await task_repository.build_task_tree(task)
-            
-            # Get root task ID (traverse up to find root)
-            root_task = await task_repository.get_root_task(task)
-            root_task_id = root_task.id
             
             # Execute task tree using TaskExecutor
             from aipartnerupflow.core.execution.task_executor import TaskExecutor
             task_executor = TaskExecutor()
             
+            # Get root_task_id for streaming context
+            root_task_id = None
+            execution_result = None
+            
+            if execution_mode == "task_id":
+                # Mode 1: Execute by task_id using execute_task_by_id()
+                # Get task to check permission and get root_task_id
+                task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+                task = await task_repository.get_task_by_id(task_id)
+                if not task:
+                    raise ValueError(f"Task {task_id} not found")
+                
+                # Check permission
+                self._check_permission(request, task.user_id, "execute")
+                
+                # Check if task is already running
+                from aipartnerupflow.core.execution.task_tracker import TaskTracker
+                task_tracker = TaskTracker()
+                if task_tracker.is_task_running(task_id):
+                    return {
+                        "success": False,
+                        "protocol": "jsonrpc",
+                        "root_task_id": task_id,
+                        "status": "already_running",
+                        "message": f"Task {task_id} is already running"
+                    }
+                
+                # Get root task ID for streaming context
+                root_task = await task_repository.get_root_task(task)
+                root_task_id = root_task.id
+                
+                # Determine streaming context
+                streaming_context = None
+                if use_streaming and webhook_config:
+                    streaming_context = CombinedStreamingContext(root_task_id, webhook_config)
+                elif use_streaming:
+                    streaming_context = TaskStreamingContext(root_task_id)
+                elif webhook_config:
+                    streaming_context = WebhookStreamingContext(root_task_id, webhook_config)
+                
+                # Execute using execute_task_by_id()
+                execution_result = await task_executor.execute_task_by_id(
+                    task_id=task_id,
+                    use_streaming=bool(streaming_context),
+                    streaming_callbacks_context=streaming_context,
+                    db_session=db_session
+                )
+                root_task_id = execution_result.get("root_task_id", root_task_id)
+                
+            elif execution_mode == "tasks_array":
+                # Mode 2: Execute by tasks array using execute_tasks()
+                # Check permission for first task if available
+                if tasks and len(tasks) > 0:
+                    first_task = tasks[0]
+                    user_id = first_task.get("user_id")
+                    if user_id:
+                        self._check_permission(request, user_id, "execute")
+                
+                # Determine streaming context (root_task_id will be determined after execution)
+                # For now, use a temporary ID for streaming context initialization
+                temp_root_id = str(uuid.uuid4())
+                streaming_context = None
+                if use_streaming and webhook_config:
+                    streaming_context = CombinedStreamingContext(temp_root_id, webhook_config)
+                elif use_streaming:
+                    streaming_context = TaskStreamingContext(temp_root_id)
+                elif webhook_config:
+                    streaming_context = WebhookStreamingContext(temp_root_id, webhook_config)
+                
+                # Execute using execute_tasks()
+                execution_result = await task_executor.execute_tasks(
+                    tasks=tasks,
+                    root_task_id=None,
+                    use_streaming=bool(streaming_context),
+                    streaming_callbacks_context=streaming_context,
+                    require_existing_tasks=None,
+                    db_session=db_session
+                )
+                root_task_id = execution_result.get("root_task_id")
+                
+                # Update streaming context with actual root_task_id if needed
+                if streaming_context and root_task_id:
+                    streaming_context.root_task_id = root_task_id
+            
             # Determine streaming_context based on requirements
             # Design: Users choose response mode (regular POST or SSE) and optionally request webhook callbacks
             # - use_streaming controls response type: False = regular POST (JSON), True = SSE (StreamingResponse)
             # - webhook_config is independent: if provided, webhook callbacks will be sent regardless of response mode
-            streaming_context = None
-            
-            if use_streaming and webhook_config:
-                # SSE mode + webhook callbacks: need both memory storage (for SSE) and webhook callbacks
-                streaming_context = CombinedStreamingContext(root_task_id, webhook_config)
-                logger.info(
-                    f"Task {task_id} execution started: SSE mode with webhook callbacks "
-                    f"(root: {root_task_id}, webhook: {webhook_config.get('url')})"
-                )
-            elif use_streaming:
-                # SSE mode only (no webhook callbacks)
-                streaming_context = TaskStreamingContext(root_task_id)
-                logger.info(f"Task {task_id} execution started: SSE mode (root: {root_task_id})")
-            elif webhook_config:
-                # Regular POST mode + webhook callbacks: need streaming_context for webhook callbacks
-                streaming_context = WebhookStreamingContext(root_task_id, webhook_config)
-                logger.info(
-                    f"Task {task_id} execution started: regular POST mode with webhook callbacks "
-                    f"(root: {root_task_id}, url: {webhook_config.get('url')})"
-                )
+            # Note: streaming_context is already set above for both execution modes
             
             # Handle response based on use_streaming (response mode)
             # Response mode 1: SSE (use_streaming=True) - return StreamingResponse with real-time events
@@ -1434,25 +1485,17 @@ class TaskRoutes(BaseRouteHandler):
                                 "success": True,
                                 "protocol": "jsonrpc",
                                 "root_task_id": root_task_id,
-                                "task_id": task_id,
+                                "task_id": task_id or root_task_id,
                                 "status": "started",
                                 "streaming": True,
-                                "message": f"Task {task_id} execution started with streaming",
+                                "message": f"Task execution started with streaming",
                                 **({"webhook_url": webhook_config.get("url")} if webhook_config else {})
                             }
                         }
                         yield f"data: {json.dumps(initial_response, ensure_ascii=False)}\n\n"
                         
-                        # Start task execution in background
-                        execution_task = asyncio.create_task(
-                            task_executor.execute_task_tree(
-                                task_tree=task_tree,
-                                root_task_id=root_task_id,
-                                use_streaming=True,  # Need streaming for callbacks
-                                streaming_callbacks_context=streaming_context,
-                                db_session=db_session
-                            )
-                        )
+                        # Execution already started above, just poll for events
+                        # Note: For both modes, execution is already in progress with streaming_context
                         
                         # Poll for events and stream them
                         # Events are stored in global _task_streaming_events by root_task_id
@@ -1478,12 +1521,6 @@ class TaskRoutes(BaseRouteHandler):
                                 
                                 # Check if final event (task completed or failed)
                                 if events and events[-1].get("final", False):
-                                    # Wait for execution task to complete
-                                    try:
-                                        await execution_task
-                                    except Exception as e:
-                                        logger.error(f"Error in execution task: {str(e)}", exc_info=True)
-                                    
                                     # Send final event and close connection
                                     yield f"data: {json.dumps({'type': 'stream_end', 'task_id': root_task_id}, ensure_ascii=False)}\n\n"
                                     break
@@ -1530,57 +1567,35 @@ class TaskRoutes(BaseRouteHandler):
             
             elif streaming_context:
                 # Response mode 2: Regular POST with webhook callbacks (use_streaming=False, webhook_config provided)
-                # Execute with streaming context for webhook callbacks, return JSON response immediately
-                # Execution needs use_streaming=True for webhook callbacks (implementation detail)
-                asyncio.create_task(
-                    task_executor.execute_task_tree(
-                        task_tree=task_tree,
-                        root_task_id=root_task_id,
-                        use_streaming=True,  # Need streaming for webhook callbacks (底层实现)
-                        streaming_callbacks_context=streaming_context,
-                        db_session=db_session
-                    )
-                )
-                
-                logger.info(f"Task {task_id} execution started with webhook callbacks (root: {root_task_id})")
+                # Execution already started above with streaming_context, return JSON response immediately
+                logger.info(f"Task execution started with webhook callbacks (root: {root_task_id})")
                 
                 return {
                     "success": True,
                     "protocol": "jsonrpc",
                     "root_task_id": root_task_id,
-                    "task_id": task_id,
+                    "task_id": task_id or root_task_id,
                     "status": "started",
                     "streaming": True,  # Indicates webhook callbacks are active
                     "message": (
-                        f"Task {task_id} execution started with webhook callbacks. "
+                        f"Task execution started with webhook callbacks. "
                         f"Updates will be sent to {webhook_config.get('url')}"
                     ),
                     "webhook_url": webhook_config.get("url")
                 }
             
             else:
-                # Response mode 2: Regular POST without webhook (use_streaming=False, no webhook_config)
-                # Execute in background, return JSON response immediately
-                # No webhook, no SSE - just fire and forget
-                asyncio.create_task(
-                    task_executor.execute_task_tree(
-                        task_tree=task_tree,
-                        root_task_id=root_task_id,
-                        use_streaming=False,  # No streaming needed
-                        streaming_callbacks_context=None,
-                        db_session=db_session
-                    )
-                )
-                
-                logger.info(f"Task {task_id} execution started (root: {root_task_id})")
+                # Response mode 3: Regular POST without webhook (use_streaming=False, no webhook_config)
+                # Execution already started above, return JSON response immediately
+                logger.info(f"Task execution started (root: {root_task_id})")
                 
                 return {
                     "success": True,
                     "protocol": "jsonrpc",
                     "root_task_id": root_task_id,
-                    "task_id": task_id,
-                    "status": "started",
-                    "message": f"Task {task_id} execution started",
+                    "task_id": task_id or root_task_id,
+                    "status": execution_result.get("status", "started") if execution_result else "started",
+                    "message": f"Task execution started",
                 }
             
         except Exception as e:

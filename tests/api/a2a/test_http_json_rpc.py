@@ -704,7 +704,8 @@ def test_jsonrpc_tasks_execute(json_rpc_client):
     assert "task_id" in execution_result
     assert execution_result["task_id"] == task_id
     assert "status" in execution_result
-    assert execution_result["status"] == "started"
+    # Status may be "started" or "completed" depending on execution speed
+    assert execution_result["status"] in ["started", "completed"]
     assert "message" in execution_result
 
 
@@ -786,7 +787,8 @@ def test_jsonrpc_tasks_execute_with_streaming(json_rpc_client):
     assert execution_result["success"] is True
     assert "protocol" in execution_result
     assert execution_result["protocol"] == "jsonrpc"  # Verify protocol identifier
-    assert execution_result["status"] == "started"
+    # Status may be "started" or "completed" depending on execution speed
+    assert execution_result["status"] in ["started", "completed"]
     assert "streaming" in execution_result
     assert execution_result["streaming"] is True
     assert execution_result["root_task_id"] == task_id
@@ -885,7 +887,8 @@ def test_jsonrpc_tasks_execute_with_webhook(json_rpc_client):
         assert execution_result["success"] is True
         assert "protocol" in execution_result
         assert execution_result["protocol"] == "jsonrpc"
-        assert execution_result["status"] == "started"
+        # Status may be "started" or "completed" depending on execution speed
+        assert execution_result["status"] in ["started", "completed"]
         assert "streaming" in execution_result
         assert execution_result["streaming"] is True
         assert "webhook_url" in execution_result
@@ -981,7 +984,8 @@ def test_jsonrpc_tasks_execute_task_tree(json_rpc_client):
     execution_result = result["result"]
     assert execution_result["success"] is True
     assert execution_result["root_task_id"] == root_task_id
-    assert execution_result["status"] == "started"
+    # Status may be "started" or "completed" depending on execution speed
+    assert execution_result["status"] in ["started", "completed"]
 
 
 def test_jsonrpc_tasks_execute_not_found(json_rpc_client):

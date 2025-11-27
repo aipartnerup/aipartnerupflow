@@ -835,12 +835,18 @@ Returns an array of task objects, each containing:
 ### `tasks.execute`
 
 **Description:**  
-Executes a task by its ID. This method builds the task tree starting from the specified task, finds the root task, and executes the entire tree. The task must exist in the database and must not already be running. Execution follows dependency order and priority scheduling.
+Executes a task by its ID with automatic dependency handling. This method supports two execution modes:
+- **Root task execution**: If the specified task is a root task (no parent), the entire task tree is executed.
+- **Child task execution**: If the specified task is a child task, the method automatically collects all dependencies (including transitive dependencies) and executes the task along with all required dependencies.
+
+The task must exist in the database and must not already be running. Execution follows dependency order and priority scheduling. This unified execution behavior ensures consistent task execution across both A2A Protocol and JSON-RPC endpoints.
 
 **Method:** `tasks.execute`
 
 **Parameters:**
-- `task_id` (string, required): Task ID to execute. Can also use `id` as an alias. The method will execute the entire task tree starting from this task.
+- `task_id` (string, required): Task ID to execute. Can also use `id` as an alias. 
+  - If the task is a root task, the entire task tree will be executed.
+  - If the task is a child task, the task and all its dependencies (including transitive) will be executed.
 - `use_streaming` (boolean, optional): Whether to use streaming mode for real-time progress updates (default: false). If true, the endpoint returns a `StreamingResponse` with Server-Sent Events (SSE) instead of a JSON response.
 - `webhook_config` (object, optional): Webhook configuration for push notifications. If provided, task execution updates will be sent to the specified webhook URL via HTTP callbacks. This is similar to A2A Protocol's push notification feature.
   - `url` (string, required): Webhook callback URL where updates will be sent
@@ -1011,9 +1017,10 @@ The server sends different types of updates during task execution:
 - Webhook failures are logged but do not affect task execution
 
 **Notes:**
-- The method executes the entire task tree starting from the specified task
-- If the task has a parent, the root task is found and the entire tree is executed
+- **Root task execution**: If `task_id` refers to a root task, the entire task tree is executed.
+- **Child task execution**: If `task_id` refers to a child task, the method automatically collects all dependencies (including transitive dependencies) and executes only the required subtree containing the task and its dependencies.
 - Task execution is asynchronous - the method returns immediately after starting execution
+- The unified execution logic ensures consistent behavior across A2A Protocol and JSON-RPC endpoints
 - Use `tasks.running.status` to check execution progress
 - Use `use_streaming=true` to receive real-time progress updates via Server-Sent Events (SSE) - the response will be a streaming response instead of JSON
 - The SSE stream includes the initial JSON-RPC response as the first event, followed by real-time progress updates

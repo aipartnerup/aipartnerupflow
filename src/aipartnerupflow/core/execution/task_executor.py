@@ -722,4 +722,240 @@ class TaskExecutor:
         logger.info(f"Loaded existing task tree: root {root_task.id} with {len(root_node.children)} direct children")
         
         return root_node
+    
+    async def _collect_all_dependencies(
+        self,
+        task_id: str,
+        task_repository,
+        collected: set,
+        processed: set,
+        all_tasks_in_tree: List
+    ) -> set:
+        """
+        Recursively collect all dependencies (including transitive dependencies) for a task
+        
+        Args:
+            task_id: Task ID to collect dependencies for
+            task_repository: TaskRepository instance
+            collected: Set of already collected dependency task IDs (output)
+            processed: Set of already processed task IDs (to avoid cycles)
+            all_tasks_in_tree: List of all tasks in the tree (for lookup)
+            
+        Returns:
+            Set of task IDs that are dependencies (including transitive)
+            Note: The target task itself is NOT included in the result
+        """
+        # Avoid processing the same task twice (cycle detection)
+        if task_id in processed:
+            return collected
+        
+        # Find the task in the tree
+        task = None
+        for t in all_tasks_in_tree:
+            if t.id == task_id:
+                task = t
+                break
+        
+        if not task:
+            return collected
+        
+        # Mark as processed to avoid cycles
+        processed.add(task_id)
+        
+        # Get dependencies from task
+        dependencies = task.dependencies or []
+        if not dependencies:
+            return collected
+        
+        # Process each dependency
+        for dep in dependencies:
+            dep_id = None
+            if isinstance(dep, dict):
+                dep_id = dep.get("id")
+            elif isinstance(dep, str):
+                dep_id = dep
+            
+            if dep_id and dep_id not in collected:
+                # Add dependency to collected set
+                collected.add(dep_id)
+                # Recursively collect dependencies of this dependency
+                collected = await self._collect_all_dependencies(
+                    dep_id, task_repository, collected, processed, all_tasks_in_tree
+                )
+        
+        return collected
+    
+    def _build_subtree_with_dependencies(
+        self,
+        target_task_id: str,
+        full_tree: TaskTreeNode,
+        required_task_ids: set
+    ) -> Optional[TaskTreeNode]:
+        """
+        Build a subtree containing the target task and all its dependencies
+        
+        This method builds a minimal subtree that includes:
+        - The target task
+        - All dependency tasks (including transitive dependencies)
+        - All ancestor nodes needed to maintain tree structure
+        
+        Args:
+            target_task_id: ID of the target task to execute
+            full_tree: TaskTreeNode of the full tree
+            required_task_ids: Set of task IDs that must be included (target + dependencies)
+            
+        Returns:
+            TaskTreeNode containing target task and dependencies, or None if not found
+        """
+        def find_node(node: TaskTreeNode, task_id: str) -> Optional[TaskTreeNode]:
+            """Find a node by task ID in the tree"""
+            if node.task.id == task_id:
+                return node
+            for child in node.children:
+                found = find_node(child, task_id)
+                if found:
+                    return found
+            return None
+        
+        def collect_ancestors(node: TaskTreeNode, task_id: str, ancestors: set) -> bool:
+            """Collect all ancestor nodes of a task"""
+            if node.task.id == task_id:
+                return True
+            for child in node.children:
+                if collect_ancestors(child, task_id, ancestors):
+                    ancestors.add(node.task.id)
+                    return True
+            return False
+        
+        def build_subtree(node: TaskTreeNode, required_ids: set, ancestor_ids: set) -> Optional[TaskTreeNode]:
+            """Build subtree containing required tasks and their ancestors"""
+            # Check if this node is required or is an ancestor of a required task
+            is_required = node.task.id in required_ids
+            is_ancestor = node.task.id in ancestor_ids
+            
+            if not is_required and not is_ancestor:
+                # Check if any descendant is required
+                has_required_descendant = False
+                def check_descendants(n: TaskTreeNode) -> bool:
+                    if n.task.id in required_ids or n.task.id in ancestor_ids:
+                        return True
+                    for child in n.children:
+                        if check_descendants(child):
+                            return True
+                    return False
+                
+                if not check_descendants(node):
+                    return None
+            
+            # Create new node for this task
+            new_node = TaskTreeNode(node.task)
+            
+            # Process children
+            for child in node.children:
+                child_subtree = build_subtree(child, required_ids, ancestor_ids)
+                if child_subtree:
+                    new_node.add_child(child_subtree)
+            
+            return new_node
+        
+        # Find target task node
+        target_node = find_node(full_tree, target_task_id)
+        if not target_node:
+            return None
+        
+        # Collect all ancestor nodes for required tasks
+        ancestor_ids = set()
+        for req_id in required_task_ids:
+            collect_ancestors(full_tree, req_id, ancestor_ids)
+        
+        # Build subtree including required tasks and their ancestors
+        return build_subtree(full_tree, required_task_ids, ancestor_ids)
+    
+    async def execute_task_by_id(
+        self,
+        task_id: str,
+        use_streaming: bool = False,
+        streaming_callbacks_context: Optional[Any] = None,
+        db_session: Optional[Union[Session, AsyncSession]] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute a task by ID with automatic dependency handling
+        
+        This method supports executing both root tasks and child tasks:
+        - Root task: Executes the entire task tree
+        - Child task: Executes the task and all its dependencies (including transitive dependencies)
+        
+        Args:
+            task_id: Task ID to execute
+            use_streaming: Whether to use streaming mode
+            streaming_callbacks_context: Context for streaming callbacks (if use_streaming is True)
+            db_session: Optional database session (defaults to get_default_session())
+            
+        Returns:
+            Execution result dictionary with status, progress, and root_task_id
+        """
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        # Get database session
+        if db_session is None:
+            db_session = get_default_session()
+        
+        # Create repository
+        task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+        
+        # Get task
+        task = await task_repository.get_task_by_id(task_id)
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+        
+        # Get root task ID (traverse up to find root)
+        root_task = await task_repository.get_root_task(task)
+        root_task_id = root_task.id
+        
+        # Check if the task is a root task (no parent_id)
+        is_root_task = task.parent_id is None
+        
+        # Build full task tree starting from root task
+        full_task_tree = await task_repository.build_task_tree(root_task)
+        
+        # Determine which tasks to execute
+        if is_root_task:
+            # If it's a root task, execute the entire tree
+            task_tree = full_task_tree
+            logger.info(f"Executing root task {task_id}: full tree will be executed")
+        else:
+            # If it's a child task, collect all dependencies (including transitive)
+            # Get all tasks in the tree for dependency lookup
+            all_tasks_in_tree = await task_repository.get_all_tasks_in_tree(root_task)
+            
+            # Collect all dependencies recursively (excluding the target task itself)
+            dependency_ids = await self._collect_all_dependencies(
+                task_id, task_repository, set(), set(), all_tasks_in_tree
+            )
+            # Add the target task itself and all its dependencies
+            required_task_ids = dependency_ids.copy()
+            required_task_ids.add(task_id)
+            
+            logger.info(
+                f"Executing child task {task_id}: will execute task and {len(required_task_ids) - 1} dependencies"
+            )
+            
+            # Build subtree containing target task and all dependencies
+            task_tree = self._build_subtree_with_dependencies(
+                task_id, full_task_tree, required_task_ids
+            )
+            
+            if not task_tree:
+                raise ValueError(f"Could not build subtree for task {task_id}")
+        
+        # Execute task tree using existing method
+        execution_result = await self.execute_task_tree(
+            task_tree=task_tree,
+            root_task_id=root_task_id,
+            use_streaming=use_streaming,
+            streaming_callbacks_context=streaming_callbacks_context,
+            db_session=db_session
+        )
+        
+        return execution_result
 
