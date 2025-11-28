@@ -95,6 +95,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Dependency satisfaction logic updated to allow completed tasks marked for re-execution to satisfy dependencies (results are available)
   - Newly created tasks (status: `pending`) are not marked for re-execution and execute normally
 
+- **Task Execution Order Clarification**
+  - **Important**: Parent-child relationships (`parent_id`) are now explicitly documented as **organizational only** and do NOT affect execution order
+  - **Only dependencies (`dependencies`) determine execution order** - a task executes when its dependencies are satisfied
+  - This clarification ensures developers understand that task tree structure (parent-child) is separate from execution order (dependencies)
+  - Updated all documentation to clearly distinguish between organizational relationships and execution dependencies
+
 - **CLI Command Improvements**
   - `serve` command now accepts options directly (e.g., `apflow serve --port 8000`) without requiring `start` subcommand
   - `serve start` subcommand still works for backward compatibility

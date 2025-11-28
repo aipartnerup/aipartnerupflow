@@ -2,6 +2,16 @@
 
 This document provides examples of creating and managing task trees with dependencies and priorities.
 
+## Important Concepts
+
+**Parent-Child Relationship vs Dependencies:**
+
+- **Parent-Child (`parent_id`)**: Used only for **organizing** the task tree structure. It helps visualize the hierarchy but does NOT affect execution order.
+
+- **Dependencies (`dependencies`)**: These **determine execution order**. A task executes only when all its required dependencies are satisfied. Dependencies control when tasks run, not parent-child relationships.
+
+**Key Point**: If you want to control execution order, always use `dependencies`. The `parent_id` field is purely for organizational purposes.
+
 ## Example 1: Simple Sequential Pipeline
 
 Execute tasks one after another:

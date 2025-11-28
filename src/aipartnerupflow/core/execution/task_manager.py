@@ -322,28 +322,9 @@ class TaskManager:
                 # Failed tasks can always be re-executed
                 logger.info(f"Task {node.task.id} is failed, will re-execute")
             
-            # Execute tasks in proper hierarchical order
-            has_completed_children = True
-            if node.children:
-                for child in node.children:
-                    child_id = str(child.task.id)
-                    # Check if child should be executed (pending, failed, or marked for re-execution)
-                    if child.task.status not in ["completed", "failed"]:
-                        has_completed_children = False
-                        break
-                    elif child.task.status == "failed":
-                        # Failed children should be re-executed
-                        has_completed_children = False
-                        break
-                    elif child.task.status == "completed" and child_id in self._tasks_to_reexecute:
-                        # Completed children marked for re-execution should be re-executed
-                        has_completed_children = False
-                        break
-            
-            if has_completed_children and node.task.status != "completed":
-                logger.debug(f"All children for task {node.task.id} are completed, executing the task itself")
-                await self._execute_single_task(node.task, use_callback)
-                return
+            # Note: Parent-child relationship is only for tree organization, not execution order
+            # Only dependencies affect execution order - a task executes when its dependencies are satisfied
+            # We process children first (for tree traversal), then check if task should execute based on dependencies
             
             # Group children by priority
             priority_groups = {}
@@ -366,7 +347,15 @@ class TaskManager:
                     self._add_children_to_priority_groups(child_node, priority_groups)
             
             if not priority_groups:
-                logger.debug(f"No children for task {node.task.id} to execute")
+                # No children to execute - check if task should be executed based on dependencies
+                # Note: Parent-child relationship is only for organization, not execution order
+                # Task execution depends on dependencies, not children status
+                deps_satisfied = await self._are_dependencies_satisfied(node.task)
+                if deps_satisfied and node.task.status != "completed":
+                    logger.debug(f"All dependencies for task {node.task.id} are satisfied, executing task")
+                    await self._execute_single_task(node.task, use_callback)
+                else:
+                    logger.debug(f"No children to execute for task {node.task.id}, and dependencies not satisfied or task already completed")
                 return
             
             # Sort priorities in ascending order (lower numbers = higher priority)
@@ -416,6 +405,16 @@ class TaskManager:
                 # Waiting tasks will be triggered by callbacks when dependencies are satisfied
                 if waiting_tasks:
                     logger.debug(f"Leaving {len(waiting_tasks)} tasks waiting for dependencies")
+            
+            # After processing all children, check if task should be executed based on dependencies
+            # Note: Parent-child relationship is only for tree organization, not execution order
+            # Only dependencies affect execution order - if a task's dependencies are satisfied, it can execute
+            # This handles both pending tasks and failed tasks that need re-execution
+            # Tasks execute when their dependencies are satisfied, regardless of children status
+            deps_satisfied = await self._are_dependencies_satisfied(node.task)
+            if deps_satisfied and node.task.status != "completed":
+                logger.debug(f"All dependencies for task {node.task.id} are satisfied, executing task")
+                await self._execute_single_task(node.task, use_callback)
                     
         except Exception as e:
             logger.error(f"Error in _execute_task_tree_recursive for task {node.task.id}: {str(e)}")
@@ -548,9 +547,23 @@ class TaskManager:
                 return
                 
             # Check if task is already finished or cancelled
-            if task.status in ["completed", "failed", "cancelled"]:
-                logger.info(f"Task {task.id} already {task.status}, skipping execution")
-                return
+            # Allow re-execution of failed tasks if they are marked for re-execution
+            task_id = str(task.id)
+            if task.status in ["completed", "cancelled"]:
+                # Check if task is marked for re-execution
+                if task_id not in self._tasks_to_reexecute:
+                    logger.info(f"Task {task.id} already {task.status}, skipping execution")
+                    return
+                else:
+                    logger.info(f"Task {task.id} is {task.status} but marked for re-execution, will re-execute")
+            elif task.status == "failed":
+                # Failed tasks can be re-executed if marked for re-execution
+                if task_id in self._tasks_to_reexecute:
+                    logger.info(f"Task {task.id} is failed and marked for re-execution, will re-execute")
+                else:
+                    # If not marked for re-execution, skip (shouldn't happen in normal flow)
+                    logger.info(f"Task {task.id} is failed but not marked for re-execution, skipping execution")
+                    return
             
             # Check if task is already in progress (may have been started by another process)
             if task.status == "in_progress":
@@ -684,11 +697,13 @@ class TaskManager:
             self._executor_instances.pop(task.id, None)
             
             # Update task status using repository
+            # Clear error field when task completes successfully (for re-execution scenarios)
             await self.task_repository.update_task_status(
                 task_id=task.id,
                 status="completed",
                 progress=1.0,
                 result=task_result,
+                error=None,  # Clear error when task completes successfully
                 completed_at=datetime.now(timezone.utc)
             )
             # Refresh task object

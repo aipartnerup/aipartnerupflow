@@ -21,6 +21,27 @@ A task tree is a hierarchical structure where:
 - **Dependencies**: Tasks that must complete before another task can execute
 - **Priority**: Controls execution order (lower numbers execute first)
 
+**Important: Parent-Child vs Dependencies**
+
+- **Parent-Child Relationship (`parent_id`)**: Used only for **organizing** the task tree structure. It does NOT affect execution order. Parent-child relationships are purely organizational and help visualize the task hierarchy.
+
+- **Dependencies (`dependencies`)**: These **determine execution order**. A task will only execute when all its required dependencies are satisfied (completed). Dependencies are the mechanism that controls when tasks run, not parent-child relationships.
+
+**Example:**
+```python
+# Task B is a child of Task A (organizational)
+# But Task B depends on Task C (execution order)
+task_a = create_task(name="task_a")
+task_b = create_task(name="task_b", parent_id=task_a.id)  # Child of A
+task_c = create_task(name="task_c")
+task_b = create_task(
+    name="task_b",
+    parent_id=task_a.id,  # Organizational: B is child of A
+    dependencies=[{"id": task_c.id, "required": True}]  # Execution: B waits for C
+)
+# Execution order: C executes first, then B (regardless of parent-child relationship)
+```
+
 ### Task Lifecycle
 
 Tasks go through the following states:
@@ -312,16 +333,29 @@ dependencies=[{"id": task1.id, "required": True}]
 # No dependency specified
 ```
 
-### 4. Use Parent-Child Relationships for Hierarchy
+### 4. Use Parent-Child Relationships for Organization, Dependencies for Execution
 
-Use `parent_id` to create hierarchical relationships:
+**Parent-child relationships (`parent_id`)** are for organizing the task tree structure:
+- Use them to group related tasks visually
+- They help understand the task hierarchy
+- They do NOT affect execution order
+
+**Dependencies (`dependencies`)** control execution order:
+- Use them to specify which tasks must complete before another task runs
+- They determine the actual execution sequence
+- A task executes when its dependencies are satisfied, regardless of parent-child relationships
 
 ```python
-# Good: Clear hierarchy
-root_task -> child_task -> grandchild_task
+# Good: Clear organization with explicit dependencies
+root_task = create_task(name="root")
+child_task = create_task(
+    name="child",
+    parent_id=root_task.id,  # Organizational: child of root
+    dependencies=[{"id": "other_task", "required": True}]  # Execution: waits for other_task
+)
 
-# Bad: Flat structure with only dependencies
-# All tasks at same level
+# Bad: Relying on parent-child for execution order
+# Parent-child does NOT guarantee execution order
 ```
 
 ### 5. Handle Errors Gracefully

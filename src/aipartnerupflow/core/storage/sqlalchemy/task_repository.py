@@ -314,8 +314,14 @@ class TaskRepository:
                 return False
             
             task.status = status
+            # Handle error field: if explicitly set to None and status is completed, clear it
+            # This allows clearing error when task completes successfully after re-execution
+            # Use a sentinel value to distinguish between "not provided" and "explicitly None"
             if error is not None:
                 task.error = error
+            elif status == "completed":
+                # Clear error when task completes successfully (re-execution scenario)
+                task.error = None
             if result is not None:
                 task.result = result
             if progress is not None:

@@ -397,9 +397,9 @@ Creates one or more tasks and automatically executes them as a task tree. This m
 - `id` (string, optional): Task ID. If not provided, auto-generated UUID will be used
 - `name` (string, required): Task name
 - `user_id` (string, optional): User ID for multi-user scenarios
-- `parent_id` (string, optional): Parent task ID for task tree structure
+- `parent_id` (string, optional): Parent task ID for task tree structure. **Note**: Parent-child relationships are for **organizational purposes only** and do NOT affect execution order. Use `dependencies` to control execution order.
 - `priority` (integer, optional): Priority level (0=urgent, 1=high, 2=normal, 3=low). Default: 1
-- `dependencies` (array, optional): Dependency list. Format: `[{"id": "task-id", "required": true}]`
+- `dependencies` (array, optional): Dependency list. Format: `[{"id": "task-id", "required": true}]`. **This determines execution order** - a task executes only when all its required dependencies are satisfied.
 - `inputs` (object, optional): Execution-time input parameters
 - `schemas` (object, optional): Task schemas. Must include `method` field with executor ID
 - `params` (object, optional): Executor initialization parameters
@@ -485,7 +485,9 @@ Creates one or more tasks and automatically executes them as a task tree. This m
 
 **Notes:**
 - Tasks are automatically executed after creation
-- Task execution follows dependency order and priority
+- **Task execution follows dependency order and priority** - not parent-child relationships
+- Parent-child relationships (`parent_id`) are for organizing the task tree structure only
+- Dependencies (`dependencies`) determine when tasks execute - a task runs when its dependencies are satisfied
 - If a task fails, dependent tasks are not executed
 - Task IDs can be auto-generated if not provided
 
@@ -1029,6 +1031,7 @@ The server sends different types of updates during task execution:
 - **Root task execution**: If `task_id` refers to a root task, the entire task tree is executed.
 - **Child task execution**: If `task_id` refers to a child task, the method automatically collects all dependencies (including transitive dependencies) and executes only the required subtree containing the task and its dependencies.
 - **Re-execution support**: Failed tasks can be re-executed by calling this method with the failed task's ID. When re-executing, all dependency tasks are also re-executed to ensure consistency.
+- **Execution order**: Task execution follows **dependency order and priority**, not parent-child relationships. Parent-child relationships (`parent_id`) are for organizing the task tree structure only. Dependencies (`dependencies`) determine when tasks execute.
 - Task execution is asynchronous - the method returns immediately after starting execution
 - The unified execution logic ensures consistent behavior across A2A Protocol and JSON-RPC endpoints
 - Only `pending` and `failed` status tasks are executed; `completed` and `in_progress` tasks are skipped unless they are dependencies of a task being re-executed
