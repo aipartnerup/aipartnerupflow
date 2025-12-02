@@ -8,7 +8,7 @@ Welcome to the aipartnerupflow documentation! This is your complete guide to bui
 
 1. **[Getting Started](getting-started/index.md)** - Overview and learning paths
 2. **[Quick Start Guide](getting-started/quick-start.md)** - Get running in 10 minutes
-3. **[First Steps Tutorial](tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
+3. **[First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
 4. **[Core Concepts](getting-started/concepts.md)** - Understand the fundamentals
 
 **Quick Installation:**
@@ -23,7 +23,7 @@ pip install aipartnerupflow
 **Start Here:**
 - **[Getting Started](getting-started/index.md)** - Your starting point
 - **[Quick Start](getting-started/quick-start.md)** - 10-minute quick start
-- **[First Steps Tutorial](tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
+- **[First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
 - **[Core Concepts](getting-started/concepts.md)** - Learn the basics
 
 **Learn by Doing:**
@@ -101,9 +101,9 @@ Essential guides for new users:
 
 ### Tutorials
 Step-by-step tutorials:
-- **[Tutorial 1: First Steps](tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
-- **[Tutorial 2: Task Trees](tutorials/tutorial-02-task-trees.md)** - Building task trees
-- **[Tutorial 3: Dependencies](tutorials/tutorial-03-dependencies.md)** - Working with dependencies
+- **[Tutorial 1: First Steps](getting-started/tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
+- **[Tutorial 2: Task Trees](getting-started/tutorials/tutorial-02-task-trees.md)** - Building task trees
+- **[Tutorial 3: Dependencies](getting-started/tutorials/tutorial-03-dependencies.md)** - Working with dependencies
 
 ### Guides
 Comprehensive guides for developers:
@@ -157,9 +157,9 @@ For contributors:
 
 ### Path 2: Complete Beginner (1-2 hours)
 1. [Getting Started Index](getting-started/index.md) - Overview
-2. [First Steps Tutorial](tutorials/tutorial-01-first-steps.md) - Complete tutorial
-3. [Task Trees Tutorial](tutorials/tutorial-02-task-trees.md) - Build task trees
-4. [Dependencies Tutorial](tutorials/tutorial-03-dependencies.md) - Master dependencies
+2. [First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md) - Complete tutorial
+3. [Task Trees Tutorial](getting-started/tutorials/tutorial-02-task-trees.md) - Build task trees
+4. [Dependencies Tutorial](getting-started/tutorials/tutorial-03-dependencies.md) - Master dependencies
 5. [Core Concepts](getting-started/concepts.md) - Deep dive
 6. [Basic Examples](examples/basic_task.md) - Practice
 
@@ -181,7 +181,7 @@ For contributors:
 **For New Users:**
 1. [Getting Started Index](getting-started/index.md)
 2. [Quick Start](getting-started/quick-start.md)
-3. [First Steps Tutorial](tutorials/tutorial-01-first-steps.md)
+3. [First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md)
 4. [Core Concepts](getting-started/concepts.md)
 5. [Basic Examples](examples/basic_task.md)
 

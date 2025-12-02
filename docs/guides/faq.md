@@ -47,7 +47,7 @@ export DATABASE_URL="postgresql+asyncpg://user:password@localhost/dbname"
 
 **A:** 
 1. **[Quick Start Guide](../getting-started/quick-start.md)** - Get running in 10 minutes
-2. **[First Steps Tutorial](../tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
+2. **[First Steps Tutorial](../getting-started/tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
 3. **[Core Concepts](../getting-started/concepts.md)** - Understand the fundamentals
 
 ## Tasks and Executors

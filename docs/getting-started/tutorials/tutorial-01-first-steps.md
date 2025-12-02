@@ -321,8 +321,8 @@ You've learned the basics! Here's what to explore:
 
 ### Immediate Next Steps
 
-1. **[Core Concepts](../getting-started/concepts.md)** - Understand the concepts deeply
-2. **[Quick Start Guide](../getting-started/quick-start.md)** - More examples and patterns
+1. **[Core Concepts](../concepts.md)** - Understand the concepts deeply
+2. **[Quick Start Guide](../quick-start.md)** - More examples and patterns
 3. **[Basic Examples](../examples/basic_task.md)** - Copy-paste ready examples
 
 ### Learn More
@@ -360,5 +360,5 @@ In this tutorial, you learned:
 - ✅ How to check task status and results
 - ✅ How to create multiple tasks
 
-**Next:** [Tutorial 2: Task Trees →](tutorial-02-task-trees.md) or [Core Concepts →](../getting-started/concepts.md)
+**Next:** [Tutorial 2: Task Trees →](tutorial-02-task-trees.md) or [Core Concepts →](../concepts.md)
 

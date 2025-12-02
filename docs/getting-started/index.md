@@ -22,7 +22,7 @@ Start here if you're completely new:
 
 1. **[Core Concepts](concepts.md)** - Learn the fundamental ideas (5 min read)
 2. **[Quick Start Guide](quick-start.md)** - Build your first task (10 min)
-3. **[First Steps Tutorial](../tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
+3. **[First Steps Tutorial](tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
 
 ### 📚 Already familiar?
 
@@ -41,7 +41,6 @@ Jump to what you need:
 - **Build complex workflows** → [Task Orchestration Guide](../guides/task-orchestration.md)
 - **Create custom task types** → [Custom Tasks Guide](../guides/custom-tasks.md)
 - **Use LLM agents** → [CrewAI Examples](../examples/basic_task.md#example-4-using-crewai-llm-tasks)
-- **Deploy to production** → [Production Tutorial](../tutorials/tutorial-05-production.md)
 - **Understand the architecture** → [Architecture Overview](../architecture/overview.md)
 
 ## Core Concepts at a Glance
@@ -149,9 +148,9 @@ asyncio.run(main())
 ### Path 2: Comprehensive (2 hours)
 1. [Core Concepts](concepts.md)
 2. [Quick Start](quick-start.md)
-3. [First Steps Tutorial](../tutorials/tutorial-01-first-steps.md)
-4. [Task Trees Tutorial](../tutorials/tutorial-02-task-trees.md)
-5. [Dependencies Tutorial](../tutorials/tutorial-03-dependencies.md)
+3. [First Steps Tutorial](tutorials/tutorial-01-first-steps.md)
+4. [Task Trees Tutorial](tutorials/tutorial-02-task-trees.md)
+5. [Dependencies Tutorial](tutorials/tutorial-03-dependencies.md)
 
 ### Path 3: Professional Developer (4+ hours)
 1. Complete Path 2

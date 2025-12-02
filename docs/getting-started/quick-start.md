@@ -377,7 +377,7 @@ Congratulations! You've learned the basics. Here's what to explore next:
 ### Immediate Next Steps
 
 1. **[Core Concepts](concepts.md)** - Deep dive into the concepts you just used
-2. **[First Steps Tutorial](../tutorials/tutorial-01-first-steps.md)** - More detailed beginner tutorial
+2. **[First Steps Tutorial](tutorials/tutorial-01-first-steps.md)** - More detailed beginner tutorial
 3. **[Basic Examples](../examples/basic_task.md)** - Copy-paste ready examples
 
 ### Learn More
@@ -388,9 +388,8 @@ Congratulations! You've learned the basics. Here's what to explore next:
 
 ### Advanced Topics
 
-- **[Task Trees Tutorial](../tutorials/tutorial-02-task-trees.md)** - Build complex workflows
-- **[Dependencies Tutorial](../tutorials/tutorial-03-dependencies.md)** - Master dependency management
-- **[Production Tutorial](../tutorials/tutorial-05-production.md)** - Deploy to production
+- **[Task Trees Tutorial](tutorials/tutorial-02-task-trees.md)** - Build complex workflows
+- **[Dependencies Tutorial](tutorials/tutorial-03-dependencies.md)** - Master dependency management
 
 ## Common Patterns
 
@@ -519,4 +518,4 @@ Create a pipeline: fetch data → process data → save results (each step depen
 
 ---
 
-**Ready for more?** → [Learn Core Concepts →](concepts.md) or [Try the First Steps Tutorial →](../tutorials/tutorial-01-first-steps.md)
+**Ready for more?** → [Learn Core Concepts →](concepts.md) or [Try the First Steps Tutorial →](tutorials/tutorial-01-first-steps.md)
