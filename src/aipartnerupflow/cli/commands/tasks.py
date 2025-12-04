@@ -111,18 +111,14 @@ def list(
                     if user_id and task.user_id != user_id:
                         continue
                     
-                    tasks_info.append({
-                        "task_id": task.id,
-                        "name": task.name,
-                        "status": task.status,
-                        "progress": float(task.progress) if task.progress else 0.0,
-                        "user_id": task.user_id,
-                        "created_at": task.created_at.isoformat() if task.created_at else None,
-                    })
+                    # Use task.to_dict() to match API format
+                    task_dict = task.to_dict()
+                    tasks_info.append(task_dict)
                 else:
                     # Task not found in database
                     tasks_info.append({
-                        "task_id": task_id,
+                        "id": task_id,
+                        "task_id": task_id,  # Keep for backward compatibility
                         "name": "Unknown",
                         "status": "unknown",
                         "progress": 0.0,
@@ -132,7 +128,8 @@ def list(
             except Exception as e:
                 logger.warning(f"Failed to get task {task_id}: {str(e)}")
                 tasks_info.append({
-                    "task_id": task_id,
+                    "id": task_id,
+                    "task_id": task_id,  # Keep for backward compatibility
                     "name": "Unknown",
                     "status": "unknown",
                     "progress": 0.0,
@@ -190,14 +187,17 @@ def status(
                 task = run_async_safe(get_task_safe(task_id))
                 
                 if task:
+                    # Match API format: (task_id, context_id, status, progress, error, is_running, started_at, updated_at)
+                    # Keep name field for CLI display convenience
                     statuses.append({
                         "task_id": task.id,
-                        "name": task.name,
+                        "context_id": task.id,  # For API compatibility
+                        "name": task.name,  # Keep for CLI display
                         "status": task.status,
                         "progress": float(task.progress) if task.progress else 0.0,
                         "is_running": is_running,
                         "error": task.error,
-                        "created_at": task.created_at.isoformat() if task.created_at else None,
+                        "started_at": task.started_at.isoformat() if task.started_at else None,
                         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
                     })
                 else:
@@ -205,35 +205,38 @@ def status(
                     if is_running:
                         statuses.append({
                             "task_id": task_id,
+                            "context_id": task_id,  # For API compatibility
                             "name": "Unknown",
                             "status": "in_progress",
                             "progress": 0.0,
                             "is_running": True,
                             "error": None,
-                            "created_at": None,
+                            "started_at": None,
                             "updated_at": None,
                         })
                     else:
                         statuses.append({
                             "task_id": task_id,
+                            "context_id": task_id,  # For API compatibility
                             "name": "Unknown",
                             "status": "not_found",
                             "progress": 0.0,
                             "is_running": False,
                             "error": None,
-                            "created_at": None,
+                            "started_at": None,
                             "updated_at": None,
                         })
             except Exception as e:
                 logger.warning(f"Failed to get task {task_id}: {str(e)}")
                 statuses.append({
                     "task_id": task_id,
+                    "context_id": task_id,  # For API compatibility
                     "name": "Unknown",
                     "status": "error",
                     "progress": 0.0,
                     "is_running": is_running,
                     "error": str(e),
-                    "created_at": None,
+                    "started_at": None,
                     "updated_at": None,
                 })
         
@@ -434,6 +437,453 @@ def copy(
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)
         logger.exception("Error copying task")
+        raise typer.Exit(1)
+
+
+@app.command()
+def get(
+    task_id: str = typer.Argument(..., help="Task ID to get"),
+):
+    """
+    Get task by ID (equivalent to tasks.get API)
+    
+    Args:
+        task_id: Task ID to retrieve
+    """
+    try:
+        from aipartnerupflow.core.storage import get_default_session
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        
+        db_session = get_default_session()
+        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+        
+        async def get_task():
+            task = await task_repository.get_task_by_id(task_id)
+            if not task:
+                raise ValueError(f"Task {task_id} not found")
+            return task.to_dict()
+        
+        task_dict = run_async_safe(get_task())
+        typer.echo(json.dumps(task_dict, indent=2))
+        
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error getting task")
+        raise typer.Exit(1)
+
+
+@app.command()
+def create(
+    file: Optional[Path] = typer.Option(None, "--file", "-f", help="JSON file containing task(s) definition"),
+    stdin: bool = typer.Option(False, "--stdin", help="Read from stdin instead of file"),
+):
+    """
+    Create task tree from JSON file or stdin (equivalent to tasks.create API)
+    
+    Args:
+        file: JSON file containing task(s) definition
+        stdin: Read from stdin instead of file
+    """
+    try:
+        import sys
+        
+        # Read task data
+        if stdin:
+            task_data = json.load(sys.stdin)
+        elif file:
+            with open(file, 'r') as f:
+                task_data = json.load(f)
+        else:
+            typer.echo("Error: Either --file or --stdin must be specified", err=True)
+            raise typer.Exit(1)
+        
+        # Convert to tasks array format if needed
+        if isinstance(task_data, dict):
+            tasks_array = [task_data]
+        elif isinstance(task_data, list):
+            tasks_array = task_data
+        else:
+            raise ValueError("Task data must be a dict (single task) or list (tasks array)")
+        
+        from aipartnerupflow.core.storage import get_default_session
+        from aipartnerupflow.core.execution.task_creator import TaskCreator
+        
+        db_session = get_default_session()
+        task_creator = TaskCreator(db_session)
+        
+        async def create_task():
+            return await task_creator.create_task_tree_from_array(tasks=tasks_array)
+        
+        task_tree = run_async_safe(create_task())
+        result = tree_node_to_dict(task_tree)
+        
+        typer.echo(json.dumps(result, indent=2))
+        typer.echo(f"\n✅ Successfully created task tree: root task {task_tree.task.id}")
+        
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error creating task")
+        raise typer.Exit(1)
+
+
+@app.command()
+def update(
+    task_id: str = typer.Argument(..., help="Task ID to update"),
+    name: Optional[str] = typer.Option(None, "--name", help="Update task name"),
+    status: Optional[str] = typer.Option(None, "--status", help="Update task status"),
+    progress: Optional[float] = typer.Option(None, "--progress", help="Update task progress (0.0-1.0)"),
+    error: Optional[str] = typer.Option(None, "--error", help="Update task error message"),
+    result: Optional[str] = typer.Option(None, "--result", help="Update task result (JSON string)"),
+    priority: Optional[int] = typer.Option(None, "--priority", help="Update task priority"),
+    inputs: Optional[str] = typer.Option(None, "--inputs", help="Update task inputs (JSON string)"),
+    params: Optional[str] = typer.Option(None, "--params", help="Update task params (JSON string)"),
+    schemas: Optional[str] = typer.Option(None, "--schemas", help="Update task schemas (JSON string)"),
+):
+    """
+    Update task fields (equivalent to tasks.update API)
+    
+    Args:
+        task_id: Task ID to update
+        name: Update task name
+        status: Update task status
+        progress: Update task progress (0.0-1.0)
+        error: Update task error message
+        result: Update task result (JSON string)
+        priority: Update task priority
+        inputs: Update task inputs (JSON string)
+        params: Update task params (JSON string)
+        schemas: Update task schemas (JSON string)
+    """
+    try:
+        from aipartnerupflow.core.storage import get_default_session
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        
+        db_session = get_default_session()
+        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+        
+        # Build update params
+        update_params = {}
+        if name is not None:
+            update_params["name"] = name
+        if status is not None:
+            update_params["status"] = status
+        if progress is not None:
+            update_params["progress"] = progress
+        if error is not None:
+            update_params["error"] = error
+        if result is not None:
+            update_params["result"] = json.loads(result)
+        if priority is not None:
+            update_params["priority"] = priority
+        if inputs is not None:
+            update_params["inputs"] = json.loads(inputs)
+        if params is not None:
+            update_params["params"] = json.loads(params)
+        if schemas is not None:
+            update_params["schemas"] = json.loads(schemas)
+        
+        if not update_params:
+            typer.echo("Error: At least one field must be specified for update", err=True)
+            raise typer.Exit(1)
+        
+        async def update_task():
+            # Get task first
+            task = await task_repository.get_task_by_id(task_id)
+            if not task:
+                raise ValueError(f"Task {task_id} not found")
+            
+            # Update status-related fields if status is provided
+            if "status" in update_params:
+                await task_repository.update_task_status(
+                    task_id=task_id,
+                    status=update_params["status"],
+                    error=update_params.get("error"),
+                    result=update_params.get("result"),
+                    progress=update_params.get("progress"),
+                )
+            else:
+                # Update individual fields
+                if "error" in update_params:
+                    await task_repository.update_task_status(
+                        task_id=task_id,
+                        status=task.status,
+                        error=update_params["error"]
+                    )
+                if "result" in update_params:
+                    await task_repository.update_task_status(
+                        task_id=task_id,
+                        status=task.status,
+                        result=update_params["result"]
+                    )
+                if "progress" in update_params:
+                    await task_repository.update_task_status(
+                        task_id=task_id,
+                        status=task.status,
+                        progress=update_params["progress"]
+                    )
+            
+            # Update other fields
+            if "name" in update_params:
+                await task_repository.update_task_name(task_id, update_params["name"])
+            if "priority" in update_params:
+                await task_repository.update_task_priority(task_id, update_params["priority"])
+            if "inputs" in update_params:
+                await task_repository.update_task_inputs(task_id, update_params["inputs"])
+            if "params" in update_params:
+                await task_repository.update_task_params(task_id, update_params["params"])
+            if "schemas" in update_params:
+                await task_repository.update_task_schemas(task_id, update_params["schemas"])
+            
+            # Get updated task
+            updated_task = await task_repository.get_task_by_id(task_id)
+            if not updated_task:
+                raise ValueError(f"Task {task_id} not found after update")
+            
+            return updated_task.to_dict()
+        
+        task_dict = run_async_safe(update_task())
+        typer.echo(json.dumps(task_dict, indent=2))
+        typer.echo(f"\n✅ Successfully updated task {task_id}")
+        
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error updating task")
+        raise typer.Exit(1)
+
+
+@app.command()
+def delete(
+    task_id: str = typer.Argument(..., help="Task ID to delete"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force deletion (if needed)"),
+):
+    """
+    Delete task (equivalent to tasks.delete API)
+    
+    Args:
+        task_id: Task ID to delete
+        force: Force deletion (if needed)
+    """
+    try:
+        from aipartnerupflow.core.storage import get_default_session
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        
+        db_session = get_default_session()
+        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+        
+        async def delete_task():
+            # Get task first to check if exists
+            task = await task_repository.get_task_by_id(task_id)
+            if not task:
+                raise ValueError(f"Task {task_id} not found")
+            
+            # Get all children recursively
+            all_children = await task_repository.get_all_children_recursive(task_id)
+            
+            # Check if all tasks are pending
+            all_tasks_to_check = [task] + all_children
+            non_pending = [t for t in all_tasks_to_check if t.status != "pending"]
+            
+            # Check for dependent tasks
+            dependent_tasks = await task_repository.find_dependent_tasks(task_id)
+            
+            # Build error message if deletion is not allowed
+            error_parts = []
+            if non_pending:
+                non_pending_children = [t for t in non_pending if t.id != task_id]
+                if non_pending_children:
+                    children_info = ", ".join([f"{t.id}: {t.status}" for t in non_pending_children])
+                    error_parts.append(f"task has {len(non_pending_children)} non-pending children: [{children_info}]")
+                if any(t.id == task_id for t in non_pending):
+                    main_task_status = next(t.status for t in non_pending if t.id == task_id)
+                    error_parts.append(f"task status is '{main_task_status}' (must be 'pending')")
+            
+            if dependent_tasks:
+                dependent_task_ids = [t.id for t in dependent_tasks]
+                error_parts.append(f"{len(dependent_tasks)} tasks depend on this task: [{', '.join(dependent_task_ids)}]")
+            
+            if error_parts and not force:
+                error_message = "Cannot delete task: " + "; ".join(error_parts)
+                raise ValueError(error_message)
+            
+            # Delete all tasks (children first, then parent)
+            deleted_count = 0
+            for child in all_children:
+                success = await task_repository.delete_task(child.id)
+                if success:
+                    deleted_count += 1
+            
+            # Delete the main task
+            success = await task_repository.delete_task(task_id)
+            if success:
+                deleted_count += 1
+            
+            return {
+                "success": True,
+                "task_id": task_id,
+                "deleted_count": deleted_count,
+                "children_deleted": len(all_children)
+            }
+        
+        result = run_async_safe(delete_task())
+        typer.echo(json.dumps(result, indent=2))
+        typer.echo(f"\n✅ Successfully deleted task {task_id} and {result['children_deleted']} children")
+        
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error deleting task")
+        raise typer.Exit(1)
+
+
+@app.command()
+def tree(
+    task_id: str = typer.Argument(..., help="Task ID to get tree for"),
+):
+    """
+    Get task tree structure (equivalent to tasks.tree API)
+    
+    Args:
+        task_id: Task ID (root or any task in tree)
+    """
+    try:
+        from aipartnerupflow.core.storage import get_default_session
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        
+        db_session = get_default_session()
+        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+        
+        async def get_tree():
+            # Get task
+            task = await task_repository.get_task_by_id(task_id)
+            if not task:
+                raise ValueError(f"Task {task_id} not found")
+            
+            # If task has parent, find root first
+            root_task = await task_repository.get_root_task(task)
+            
+            # Build task tree
+            task_tree_node = await task_repository.build_task_tree(root_task)
+            
+            # Convert TaskTreeNode to dictionary format
+            return tree_node_to_dict(task_tree_node)
+        
+        result = run_async_safe(get_tree())
+        typer.echo(json.dumps(result, indent=2))
+        
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error getting task tree")
+        raise typer.Exit(1)
+
+
+@app.command()
+def children(
+    parent_id: Optional[str] = typer.Option(None, "--parent-id", "-p", help="Parent task ID"),
+    task_id: Optional[str] = typer.Option(None, "--task-id", "-t", help="Task ID (alternative to parent-id)"),
+):
+    """
+    Get child tasks (equivalent to tasks.children API)
+    
+    Args:
+        parent_id: Parent task ID
+        task_id: Task ID (alternative to parent-id)
+    """
+    try:
+        parent_task_id = parent_id or task_id
+        if not parent_task_id:
+            typer.echo("Error: Either --parent-id or --task-id must be specified", err=True)
+            raise typer.Exit(1)
+        
+        from aipartnerupflow.core.storage import get_default_session
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        
+        db_session = get_default_session()
+        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+        
+        async def get_children():
+            # Get parent task to verify it exists
+            parent_task = await task_repository.get_task_by_id(parent_task_id)
+            if not parent_task:
+                raise ValueError(f"Parent task {parent_task_id} not found")
+            
+            # Get child tasks
+            children = await task_repository.get_child_tasks_by_parent_id(parent_task_id)
+            
+            # Convert to dictionaries
+            return [child.to_dict() for child in children]
+        
+        result = run_async_safe(get_children())
+        typer.echo(json.dumps(result, indent=2))
+        
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error getting child tasks")
+        raise typer.Exit(1)
+
+
+@app.command()
+def all(
+    user_id: Optional[str] = typer.Option(None, "--user-id", "-u", help="Filter by user ID"),
+    status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status"),
+    root_only: bool = typer.Option(True, "--root-only/--all-tasks", help="Only show root tasks (default: True)"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of tasks to return"),
+    offset: int = typer.Option(0, "--offset", "-o", help="Pagination offset"),
+):
+    """
+    List all tasks from database, not just running ones (equivalent to tasks.list API)
+    
+    Args:
+        user_id: Filter by user ID
+        status: Filter by status
+        root_only: Only show root tasks (default: True)
+        limit: Maximum number of tasks to return
+        offset: Pagination offset
+    """
+    try:
+        from aipartnerupflow.core.storage import get_default_session
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        
+        db_session = get_default_session()
+        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+        
+        async def get_all_tasks():
+            # Query tasks with filters
+            parent_id_filter = "" if root_only else None
+            tasks = await task_repository.query_tasks(
+                user_id=user_id,
+                status=status,
+                parent_id=parent_id_filter,
+                limit=limit,
+                offset=offset,
+                order_by="created_at",
+                order_desc=True
+            )
+            
+            # Convert to dictionaries and check if tasks have children
+            task_dicts = []
+            for task in tasks:
+                task_dict = task.to_dict()
+                
+                # Check if task has children (if has_children field is not set or False, check database)
+                if not task_dict.get("has_children"):
+                    children = await task_repository.get_child_tasks_by_parent_id(task.id)
+                    task_dict["has_children"] = len(children) > 0
+                
+                task_dicts.append(task_dict)
+            
+            return task_dicts
+        
+        tasks = run_async_safe(get_all_tasks())
+        typer.echo(json.dumps(tasks, indent=2))
+        
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error listing all tasks")
         raise typer.Exit(1)
 
 

@@ -454,6 +454,74 @@ def test_jsonrpc_error_handling(json_rpc_client):
     assert result["error"]["code"] == -32601  # Method not found
 
 
+def test_jsonrpc_missing_id_returns_null(json_rpc_client):
+    """Test that requests without id return null in response (JSON-RPC 2.0 compliance)"""
+    # Request without id field
+    request_payload = {
+        "jsonrpc": "2.0",
+        "method": "system.health",
+        "params": {}
+    }
+    
+    response = json_rpc_client.post(
+        "/system",
+        json=request_payload,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    # Verify JSON-RPC response structure
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "id" in result
+    # According to JSON-RPC 2.0, if request has no id, response id should be null
+    assert result["id"] is None
+    assert "result" in result
+
+
+def test_jsonrpc_id_type_preservation(json_rpc_client):
+    """Test that id type (string/number) is preserved in response"""
+    # Test with number id
+    request_payload = {
+        "jsonrpc": "2.0",
+        "id": 123,
+        "method": "system.health",
+        "params": {}
+    }
+    
+    response = json_rpc_client.post(
+        "/system",
+        json=request_payload,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    assert result["id"] == 123
+    assert isinstance(result["id"], int)
+    
+    # Test with string id
+    request_payload = {
+        "jsonrpc": "2.0",
+        "id": "test-id-123",
+        "method": "system.health",
+        "params": {}
+    }
+    
+    response = json_rpc_client.post(
+        "/system",
+        json=request_payload,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    assert result["id"] == "test-id-123"
+    assert isinstance(result["id"], str)
+
+
 def test_jsonrpc_running_tasks_list(json_rpc_client):
     """Test listing running tasks via JSON-RPC"""
     list_request = {

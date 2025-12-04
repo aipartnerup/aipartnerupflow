@@ -390,7 +390,9 @@ class TaskRoutes(BaseRouteHandler):
                     result = await self.handle_task_copy(params, request, request_id)
                 # Task execution
                 elif method == "tasks.execute":
-                    response = await self.handle_task_execute(params, request, request_id)
+                    # Use id from request body if available (JSON-RPC compliance), otherwise use generated request_id
+                    jsonrpc_id = body.get("id") if body.get("id") is not None else request_id
+                    response = await self.handle_task_execute(params, request, request_id, jsonrpc_id)
                     # If handle_task_execute returns StreamingResponse (SSE mode), return it directly
                     if isinstance(response, StreamingResponse):
                         return response
@@ -400,7 +402,7 @@ class TaskRoutes(BaseRouteHandler):
                         status_code=400,
                         content={
                             "jsonrpc": "2.0",
-                            "id": body.get("id", request_id),
+                            "id": body.get("id"),
                             "error": {
                                 "code": -32601,
                                 "message": "Method not found",
@@ -416,18 +418,26 @@ class TaskRoutes(BaseRouteHandler):
             return JSONResponse(
                 content={
                     "jsonrpc": "2.0",
-                    "id": body.get("id", request_id),
+                    "id": body.get("id"),
                     "result": result
                 }
             )
             
         except Exception as e:
             logger.error(f"Error handling task request: {str(e)}", exc_info=True)
+            # Get request ID safely (body might not be defined if JSON parsing failed)
+            request_id_from_body = None
+            try:
+                if 'body' in locals() and body is not None:
+                    request_id_from_body = body.get("id")
+            except:
+                pass
+            
             return JSONResponse(
                 status_code=500,
                 content={
                     "jsonrpc": "2.0",
-                    "id": body.get("id", str(uuid.uuid4())),
+                    "id": request_id_from_body,
                     "error": {
                         "code": -32603,
                         "message": "Internal error",
@@ -1577,7 +1587,8 @@ class TaskRoutes(BaseRouteHandler):
         self,
         params: dict,
         request: Request,
-        request_id: str
+        request_id: str,
+        jsonrpc_id: Any = None
     ) -> Union[dict, StreamingResponse]:
         """
         Handle task execution - supports both task_id and tasks array
@@ -1798,7 +1809,7 @@ class TaskRoutes(BaseRouteHandler):
                         
                         initial_response = {
                             "jsonrpc": "2.0",
-                            "id": request_id,
+                            "id": jsonrpc_id if jsonrpc_id is not None else request_id,
                             "result": response_data
                         }
                         yield f"data: {json.dumps(initial_response, ensure_ascii=False)}\n\n"

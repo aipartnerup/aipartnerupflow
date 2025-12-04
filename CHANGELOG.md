@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CLI Task Commands Synchronization with API**
+  - Complete synchronization of CLI task commands with API task routes
+  - Unified data format: CLI commands now return the same data structure as API endpoints using `task.to_dict()`
+  - New CLI commands matching API functionality:
+    - `tasks get <task_id>` - Get task details (equivalent to `tasks.get` API)
+    - `tasks create --file <file>|--stdin` - Create task tree from JSON file or stdin (equivalent to `tasks.create` API)
+    - `tasks update <task_id> [options]` - Update task fields (equivalent to `tasks.update` API)
+    - `tasks delete <task_id> [--force]` - Delete task with validation (equivalent to `tasks.delete` API)
+    - `tasks tree <task_id>` - Get task tree structure (equivalent to `tasks.tree` API)
+    - `tasks children --parent-id <id>|--task-id <id>` - Get child tasks (equivalent to `tasks.children` API)
+    - `tasks all [options]` - List all tasks from database with filters (equivalent to `tasks.list` API)
+  - Enhanced existing commands:
+    - `tasks list` - Now returns full `task.to_dict()` format matching API `tasks.running.list`
+    - `tasks status` - Now includes `context_id`, `started_at`, and `updated_at` fields matching API format
+  - All CLI commands maintain API compatibility for consistent data formats
+  - Comprehensive test coverage with 43 test cases covering all CLI task commands
+
 - **Unified A2A Protocol Task Management**
   - All task management operations now fully supported through A2A Protocol `/` route
   - Standardized method naming: `tasks.execute`, `tasks.create`, `tasks.get`, `tasks.update`, `tasks.delete`, `tasks.detail`, `tasks.tree`, `tasks.list`, `tasks.children`, `tasks.running.list`, `tasks.running.status`, `tasks.running.count`, `tasks.cancel`, `tasks.copy`

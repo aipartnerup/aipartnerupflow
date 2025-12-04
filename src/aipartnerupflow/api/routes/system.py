@@ -59,7 +59,7 @@ class SystemRoutes(BaseRouteHandler):
                     status_code=400,
                     content={
                         "jsonrpc": "2.0",
-                        "id": body.get("id", request_id),
+                        "id": body.get("id"),
                         "error": {
                             "code": -32601,
                             "message": "Method not found",
@@ -75,7 +75,7 @@ class SystemRoutes(BaseRouteHandler):
             return JSONResponse(
                 content={
                     "jsonrpc": "2.0",
-                    "id": body.get("id", request_id),
+                    "id": body.get("id"),
                     "result": result
                 }
             )
@@ -83,16 +83,18 @@ class SystemRoutes(BaseRouteHandler):
         except Exception as e:
             logger.error(f"Error handling system request: {str(e)}", exc_info=True)
             # Get request ID safely (body might not be defined if JSON parsing failed)
+            request_id_from_body = None
             try:
-                request_id_from_body = body.get("id") if 'body' in locals() else None
+                if 'body' in locals() and body is not None:
+                    request_id_from_body = body.get("id")
             except:
-                request_id_from_body = None
+                pass
             
             return JSONResponse(
                 status_code=500,
                 content={
                     "jsonrpc": "2.0",
-                    "id": request_id_from_body or str(uuid.uuid4()),
+                    "id": request_id_from_body,
                     "error": {
                         "code": -32603,
                         "message": "Internal error",

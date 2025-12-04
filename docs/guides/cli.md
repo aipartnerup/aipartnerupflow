@@ -279,6 +279,8 @@ aipartnerupflow run flow <executor_id> --inputs '{"key": "value"}' --user-id my-
 
 ### Query Tasks
 
+#### List Running Tasks
+
 ```bash
 # List all running tasks
 aipartnerupflow tasks list
@@ -286,14 +288,74 @@ aipartnerupflow tasks list
 # List with user filter
 aipartnerupflow tasks list --user-id my-user
 
+# Limit number of results
+aipartnerupflow tasks list --limit 50
+```
+
+#### Get Task Details
+
+```bash
+# Get details of a specific task
+aipartnerupflow tasks get task-123
+```
+
+#### Check Task Status
+
+```bash
 # Check status of specific tasks
 aipartnerupflow tasks status task-123 task-456
+```
 
+#### Count Running Tasks
+
+```bash
 # Count running tasks
 aipartnerupflow tasks count
 
 # Count with user filter
 aipartnerupflow tasks count --user-id my-user
+```
+
+#### List All Tasks (from Database)
+
+```bash
+# List all tasks from database (not just running)
+aipartnerupflow tasks all
+
+# Filter by status
+aipartnerupflow tasks all --status completed
+
+# Filter by user ID
+aipartnerupflow tasks all --user-id my-user
+
+# Only show root tasks (default: True)
+aipartnerupflow tasks all --root-only
+
+# Show all tasks including children
+aipartnerupflow tasks all --all-tasks
+
+# Limit and pagination
+aipartnerupflow tasks all --limit 50 --offset 0
+```
+
+#### Get Task Tree
+
+```bash
+# Get task tree structure starting from a task
+aipartnerupflow tasks tree task-123
+
+# If task is a child, returns the root tree
+aipartnerupflow tasks tree child-task-456
+```
+
+#### Get Child Tasks
+
+```bash
+# Get children of a parent task
+aipartnerupflow tasks children --parent-id task-123
+
+# Alternative: use --task-id (same as --parent-id)
+aipartnerupflow tasks children --task-id task-123
 ```
 
 ### Monitor Tasks
@@ -321,6 +383,79 @@ aipartnerupflow tasks cancel task-123 task-456 task-789
 # Force cancel (immediate stop)
 aipartnerupflow tasks cancel task-123 --force
 ```
+
+### Create Tasks
+
+Create task trees from JSON file or stdin.
+
+```bash
+# Create task tree from JSON file
+aipartnerupflow tasks create --file tasks.json
+
+# Create task tree from stdin
+echo '{"id": "task1", "name": "Task 1", ...}' | aipartnerupflow tasks create --stdin
+
+# File format: single task object or array of tasks
+cat > tasks.json << EOF
+[
+  {
+    "id": "task1",
+    "name": "Task 1",
+    "user_id": "my-user",
+    "status": "pending",
+    "priority": 1,
+    "has_children": false,
+    "progress": 0.0
+  }
+]
+EOF
+aipartnerupflow tasks create --file tasks.json
+```
+
+### Update Tasks
+
+Update task fields (name, status, progress, inputs, params, etc.).
+
+```bash
+# Update task name
+aipartnerupflow tasks update task-123 --name "New Task Name"
+
+# Update task status and progress
+aipartnerupflow tasks update task-123 --status completed --progress 1.0
+
+# Update task inputs (JSON string)
+aipartnerupflow tasks update task-123 --inputs '{"key": "value"}'
+
+# Update task params (JSON string)
+aipartnerupflow tasks update task-123 --params '{"executor_id": "my_executor"}'
+
+# Update multiple fields
+aipartnerupflow tasks update task-123 \
+  --name "Updated Name" \
+  --status in_progress \
+  --progress 0.5 \
+  --error "Custom error message"
+```
+
+**Note**: Critical fields (`parent_id`, `user_id`, `dependencies`) cannot be updated after task creation.
+
+### Delete Tasks
+
+Delete tasks with validation (only pending tasks can be deleted).
+
+```bash
+# Delete a pending task
+aipartnerupflow tasks delete task-123
+
+# Force delete (bypasses validation)
+aipartnerupflow tasks delete task-123 --force
+```
+
+**Deletion Rules:**
+- Only tasks in `pending` status can be deleted (unless `--force` is used)
+- All child tasks (recursively) must also be in `pending` status
+- Tasks with dependencies cannot be deleted (other tasks depend on them)
+- When deletion is allowed, all child tasks are automatically deleted
 
 ### Copy Tasks
 

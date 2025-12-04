@@ -68,13 +68,22 @@ CLI → Parse tasks (JSON array) → Group by root → TaskExecutor.execute_task
 
 ### 2. Query Tasks (`tasks`)
 
-**Purpose**: Query task status, list running tasks, count tasks.
+**Purpose**: Query task status, list running tasks, count tasks, and manage tasks.
 
 **Commands**:
-- `tasks list` - List running tasks
+- `tasks list` - List running tasks (from TaskTracker)
+- `tasks all` - List all tasks from database with filters
+- `tasks get <task_id>` - Get task details
 - `tasks status <task_id>...` - Get status of specific tasks
 - `tasks count` - Count running tasks
-- `tasks cancel <task_id>...` - Cancel running tasks (to be implemented)
+- `tasks tree <task_id>` - Get task tree structure
+- `tasks children --parent-id <id>` - Get child tasks
+- `tasks create --file <file>|--stdin` - Create task tree
+- `tasks update <task_id> [options]` - Update task fields
+- `tasks delete <task_id> [--force]` - Delete task
+- `tasks cancel <task_id>...` - Cancel running tasks
+- `tasks copy <task_id> [--children]` - Copy task tree
+- `tasks watch [--task-id <id>|--all]` - Watch task status in real-time
 
 **Data Sources**:
 - **TaskTracker**: In-memory set of running task IDs (fast, real-time)
