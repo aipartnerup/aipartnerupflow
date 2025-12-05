@@ -3,9 +3,6 @@ CLI main entry point for aipartnerupflow
 """
 
 import typer
-import json
-from typing import Optional
-from pathlib import Path
 from aipartnerupflow.cli.commands import run, serve, daemon, tasks, examples
 from aipartnerupflow.core.utils.logger import get_logger
 

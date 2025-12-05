@@ -28,6 +28,10 @@ from aipartnerupflow.core.config import (
     set_task_model_class,
     get_task_model_class,
     clear_config,
+    set_use_task_creator,
+    get_use_task_creator,
+    set_require_existing_tasks,
+    get_require_existing_tasks,
 )
 
 # Re-export extension decorators
@@ -47,6 +51,12 @@ __all__ = [
     "set_task_model_class",
     "get_task_model_class",
     "clear_config",
+    # TaskCreator configuration
+    "set_use_task_creator",
+    "get_use_task_creator",
+    # Task execution mode configuration
+    "set_require_existing_tasks",
+    "get_require_existing_tasks",
     # Extension registration
     "executor_register",
     "storage_register",

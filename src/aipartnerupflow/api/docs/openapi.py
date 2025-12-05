@@ -5,12 +5,13 @@ Generates OpenAPI 3.0 schema for JSON-RPC 2.0 endpoints.
 """
 
 from typing import Optional, Dict, Any
+from aipartnerupflow import __version__
 
 
 def generate_openapi_schema(
     base_url: str = "http://localhost:8000",
     title: str = "AIPartnerUpFlow API",
-    version: str = "0.2.0",
+    version: Optional[str] = None,
     description: str = "Agent workflow orchestration and execution platform API",
 ) -> Dict[str, Any]:
     """
@@ -19,18 +20,20 @@ def generate_openapi_schema(
     Args:
         base_url: Base URL of the API server
         title: API title
-        version: API version
+        version: API version (defaults to package version if not provided)
         description: API description
         
     Returns:
         OpenAPI 3.0 schema dictionary
     """
+    # Use provided version or default to package version
+    api_version = version if version is not None else __version__
     
     schema = {
         "openapi": "3.0.0",
         "info": {
             "title": title,
-            "version": version,
+            "version": api_version,
             "description": description,
             "contact": {
                 "name": "aipartnerupflow",
@@ -66,7 +69,7 @@ def generate_openapi_schema(
                                         "name": "aipartnerupflow",
                                         "description": "Agent workflow orchestration and execution platform",
                                         "url": "http://localhost:8000",
-                                        "version": "0.2.0",
+                                        "version": api_version,
                                         "capabilities": {
                                             "streaming": True,
                                             "push_notifications": True,

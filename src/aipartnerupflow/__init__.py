@@ -19,7 +19,7 @@ Optional extensions (require extras):
 Protocol Standard: A2A (Agent-to-Agent) Protocol
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 # Core framework - re-export from core module for convenience
 from aipartnerupflow.core import (
@@ -41,9 +41,14 @@ from aipartnerupflow.core.decorators import (
     set_task_model_class,
     get_task_model_class,
     clear_config,
+    set_use_task_creator,
+    get_use_task_creator,
+    set_require_existing_tasks,
+    get_require_existing_tasks,
     executor_register,
     storage_register,
     hook_register,
+    tool_register,
 )
 
 __all__ = [
@@ -63,9 +68,14 @@ __all__ = [
     "set_task_model_class",
     "get_task_model_class",
     "clear_config",
+    "set_use_task_creator",
+    "get_use_task_creator",
+    "set_require_existing_tasks",
+    "get_require_existing_tasks",
     "executor_register",
     "storage_register",
     "hook_register",
+    "tool_register",
     # Version
     "__version__",
 ]
