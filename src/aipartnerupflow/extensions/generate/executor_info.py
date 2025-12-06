@@ -98,51 +98,53 @@ def get_executor_schema(executor_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def format_executors_for_llm() -> str:
+def format_executors_for_llm(max_executors: int = 20, max_schema_props: int = 5) -> str:
     """
-    Format executor information for LLM context
+    Format executor information for LLM context (optimized for token limits)
     
+    Args:
+        max_executors: Maximum number of executors to include
+        max_schema_props: Maximum number of schema properties per executor
+        
     Returns:
-        Formatted string containing all executor information
+        Formatted string containing executor information (truncated)
     """
     executors = get_available_executors()
     
     if not executors:
         return "No executors are currently registered."
     
-    lines = ["Available Executors:", "=" * 80, ""]
+    # Limit number of executors
+    executors = executors[:max_executors]
+    
+    lines = ["Available Executors (showing most common):", ""]
     
     for executor in executors:
-        lines.append(f"Executor ID: {executor['id']}")
-        lines.append(f"Name: {executor['name']}")
-        lines.append(f"Description: {executor['description']}")
-        if executor.get('tags'):
-            lines.append(f"Tags: {', '.join(executor['tags'])}")
-        lines.append(f"Task Type: {executor['task_type']}")
+        lines.append(f"ID: {executor['id']}")
+        lines.append(f"Description: {executor['description'][:200]}")  # Limit description length
         
-        # Format input schema
+        # Format input schema (simplified)
         input_schema = executor.get('input_schema')
-        if input_schema:
-            lines.append("Input Schema:")
-            if isinstance(input_schema, dict):
-                # Format JSON schema
-                properties = input_schema.get('properties', {})
-                required = input_schema.get('required', [])
-                
-                for prop_name, prop_info in properties.items():
+        if input_schema and isinstance(input_schema, dict):
+            properties = input_schema.get('properties', {})
+            required = input_schema.get('required', [])
+            
+            # Limit number of properties shown
+            prop_items = list(properties.items())[:max_schema_props]
+            if prop_items:
+                lines.append("Input Schema:")
+                for prop_name, prop_info in prop_items:
                     prop_type = prop_info.get('type', 'unknown')
-                    prop_desc = prop_info.get('description', '')
                     is_required = prop_name in required
-                    req_marker = " (required)" if is_required else " (optional)"
+                    req_marker = " (required)" if is_required else ""
                     lines.append(f"  - {prop_name}: {prop_type}{req_marker}")
-                    if prop_desc:
-                        lines.append(f"    Description: {prop_desc}")
-            else:
-                lines.append(f"  {input_schema}")
-        else:
-            lines.append("Input Schema: Not available")
+                if len(properties) > max_schema_props:
+                    lines.append(f"  ... and {len(properties) - max_schema_props} more properties")
         
         lines.append("")
+    
+    if len(get_available_executors()) > max_executors:
+        lines.append(f"[Note: {len(get_available_executors()) - max_executors} more executors available]")
     
     return "\n".join(lines)
 

@@ -56,7 +56,8 @@ class OpenAIClient(LLMClient):
                 "OpenAI package is required. Install it with: pip install openai"
             )
         
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4")
+        # Default to gpt-4o which has larger context window (128k tokens)
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o")
         
         if not self.client.api_key:
             raise ValueError(
@@ -114,7 +115,8 @@ class AnthropicClient(LLMClient):
                 "Anthropic package is required. Install it with: pip install anthropic"
             )
         
-        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-3-opus-20240229")
+        # Default to claude-3-5-sonnet which has larger context window (200k tokens)
+        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
         
         if not self.client.api_key:
             raise ValueError(

@@ -80,41 +80,83 @@ def load_concepts() -> str:
     return _read_doc_file("getting-started/concepts.md")
 
 
-def load_all_docs() -> str:
+def _truncate_text(text: str, max_chars: int = 3000) -> str:
     """
-    Load all relevant documentation for LLM context
+    Truncate text to maximum character count, preserving structure
     
+    Args:
+        text: Text to truncate
+        max_chars: Maximum characters to keep
+        
     Returns:
-        Combined documentation content
+        Truncated text with indicator
+    """
+    if len(text) <= max_chars:
+        return text
+    
+    # Try to truncate at a sentence boundary
+    truncated = text[:max_chars]
+    last_period = truncated.rfind('.')
+    last_newline = truncated.rfind('\n')
+    
+    # Use the later of period or newline
+    cut_point = max(last_period, last_newline)
+    if cut_point > max_chars * 0.8:  # Only use if we keep at least 80% of content
+        truncated = truncated[:cut_point + 1]
+    
+    return truncated + f"\n\n[Content truncated to {max_chars} characters for brevity]"
+
+
+def load_all_docs(max_chars_per_section: int = 2000) -> str:
+    """
+    Load all relevant documentation for LLM context (truncated for token limits)
+    
+    Args:
+        max_chars_per_section: Maximum characters per documentation section
+        
+    Returns:
+        Combined documentation content (truncated)
     """
     sections = []
     
-    # Core concepts
+    # Core concepts (essential, keep more)
     concepts = load_concepts()
     if concepts:
-        sections.append("=== Core Concepts ===")
-        sections.append(concepts)
+        sections.append("=== Core Concepts (Summary) ===")
+        # Extract key points from concepts
+        concepts_truncated = _truncate_text(concepts, max_chars_per_section)
+        sections.append(concepts_truncated)
         sections.append("")
     
-    # Task orchestration
+    # Task orchestration (key rules only)
     orchestration = load_task_orchestration_docs()
     if orchestration:
-        sections.append("=== Task Orchestration Guide ===")
-        sections.append(orchestration)
+        sections.append("=== Task Orchestration (Key Rules) ===")
+        # Extract key rules about parent_id vs dependencies
+        key_rules = []
+        lines = orchestration.split('\n')
+        in_key_section = False
+        for line in lines:
+            if 'parent_id' in line.lower() or 'dependencies' in line.lower() or 'execution order' in line.lower():
+                in_key_section = True
+            if in_key_section and line.strip():
+                key_rules.append(line)
+                if len('\n'.join(key_rules)) > max_chars_per_section:
+                    break
+        
+        if key_rules:
+            sections.append(_truncate_text('\n'.join(key_rules), max_chars_per_section))
+        else:
+            sections.append(_truncate_text(orchestration, max_chars_per_section))
         sections.append("")
     
-    # Task examples
+    # Task examples (just a few examples)
     examples = load_task_examples()
     if examples:
-        sections.append("=== Task Tree Examples ===")
-        sections.append(examples)
-        sections.append("")
-    
-    # Custom tasks
-    custom_tasks = load_executor_docs()
-    if custom_tasks:
-        sections.append("=== Custom Tasks Guide ===")
-        sections.append(custom_tasks)
+        sections.append("=== Task Tree Examples (Key Examples) ===")
+        # Extract first example
+        example_truncated = _truncate_text(examples, max_chars_per_section)
+        sections.append(example_truncated)
         sections.append("")
     
     return "\n".join(sections)

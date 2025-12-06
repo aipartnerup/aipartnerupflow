@@ -52,6 +52,7 @@ cli = [
     "click>=8.0.0",
     "rich>=13.0.0",
     "typer>=0.9.0",
+    "python-dotenv>=1.0.0",  # For .env file support
 ]
 
 # PostgreSQL storage (enterprise/distributed scenarios)

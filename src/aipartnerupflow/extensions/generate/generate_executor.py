@@ -165,7 +165,7 @@ class GenerateExecutor(BaseTask):
     
     def _build_llm_prompt(self, requirement: str, user_id: Optional[str] = None) -> str:
         """
-        Build LLM prompt with context
+        Build LLM prompt with context (optimized for token limits)
         
         Args:
             requirement: User's natural language requirement
@@ -174,85 +174,75 @@ class GenerateExecutor(BaseTask):
         Returns:
             Complete prompt string
         """
-        # Load documentation
-        docs = load_all_docs()
+        # Load documentation (truncated)
+        docs = load_all_docs(max_chars_per_section=1500)
         
-        # Get executor information
-        executors_info = format_executors_for_llm()
+        # Get executor information (limited)
+        executors_info = format_executors_for_llm(max_executors=15, max_schema_props=3)
         
-        # Build prompt
+        # Build concise prompt
         prompt_parts = [
-            "You are a task tree generator for the aipartnerupflow framework.",
-            "Your job is to generate a valid task tree JSON array from natural language requirements.",
+            "You are a task tree generator for aipartnerupflow framework.",
+            "Generate a valid JSON array of tasks from natural language requirements.",
             "",
-            "=== Framework Documentation ===",
-            docs,
+            "=== Key Framework Rules ===",
+            "1. parent_id = organization only (like folders), does NOT control execution",
+            "2. dependencies = execution order (tasks wait for dependencies)",
+            "3. Either ALL tasks have 'id', or NONE do (use name for references if no id)",
+            "4. Exactly ONE root task (no parent_id)",
+            "5. Task 'name' must match an available executor ID exactly",
+            "",
+            "=== Task Object Format ===",
+            "{",
+            '  "name": "executor_id",  // Required: matches available executor',
+            '  "id": "task_1",  // Optional: if used, ALL tasks need id',
+            '  "user_id": "user123",  // Optional',
+            '  "priority": 1,  // Optional: 0=urgent, 1=high, 2=normal, 3=low',
+            '  "inputs": {...},  // Optional: executor input parameters',
+            '  "parent_id": "task_0",  // Optional: for organization',
+            '  "dependencies": [{"id": "task_0", "required": true}]  // Optional: execution order',
+            "}",
+            "",
+            "=== Framework Documentation (Summary) ===",
+            docs[:2000] if len(docs) > 2000 else docs,  # Additional truncation
             "",
             "=== Available Executors ===",
-            executors_info,
+            executors_info[:3000] if len(executors_info) > 3000 else executors_info,  # Additional truncation
             "",
-            "=== Task Array Format ===",
-            "The output must be a JSON array of task objects. Each task must have:",
-            "- name: (required) Executor ID that matches one of the available executors",
-            "- id: (optional) Task ID. If provided, ALL tasks must have id and use id for references",
-            "- user_id: (optional) User ID",
-            "- priority: (optional) Priority level (0=urgent, 1=high, 2=normal, 3=low, default: 1)",
-            "- inputs: (optional) Execution-time input parameters for the executor",
-            "- schemas: (optional) Task schemas, e.g., {\"method\": \"executor_id\"}",
-            "- params: (optional) Executor initialization parameters",
-            "- parent_id: (optional) Parent task ID or name (for hierarchy organization)",
-            "- dependencies: (optional) List of dependencies, e.g., [{\"id\": \"task_0\", \"required\": true}]",
-            "",
-            "=== Important Rules ===",
-            "1. Either ALL tasks have 'id' field, or NONE do (use name for references if no id)",
-            "2. parent_id is for ORGANIZATION only (like folders), it does NOT control execution order",
-            "3. dependencies control EXECUTION ORDER - use dependencies to make tasks wait for each other",
-            "4. There must be exactly ONE root task (task with no parent_id)",
-            "5. All parent_id and dependency references must exist in the array",
-            "6. No circular dependencies allowed",
-            "7. Task names must match available executor IDs exactly",
-            "8. Input parameters must match the executor's input schema",
-            "",
-            "=== Example Task Array ===",
+            "=== Example ===",
             json.dumps([
                 {
                     "id": "task_1",
                     "name": "rest_executor",
-                    "user_id": "user123",
-                    "priority": 1,
-                    "inputs": {
-                        "url": "https://api.example.com/data",
-                        "method": "GET"
-                    }
+                    "inputs": {"url": "https://api.example.com/data", "method": "GET"}
                 },
                 {
                     "id": "task_2",
                     "name": "command_executor",
-                    "user_id": "user123",
                     "parent_id": "task_1",
                     "dependencies": [{"id": "task_1", "required": True}],
-                    "priority": 2,
-                    "inputs": {
-                        "command": "python process_data.py"
-                    }
+                    "inputs": {"command": "python process_data.py --input data.json --output result.json"}
                 }
             ], indent=2),
             "",
-            "=== User Requirement ===",
+            "=== Requirement ===",
             requirement,
             "",
-            "=== Your Task ===",
-            "Generate a valid task tree JSON array that fulfills the requirement above.",
-            "Return ONLY the JSON array, no markdown code blocks, no explanations.",
-            "Ensure all tasks are properly connected in a single tree with one root task.",
-            "Use appropriate executors from the available list.",
-            "Set proper dependencies to control execution order.",
+            "=== Output Instructions ===",
+            "1. Generate realistic, complete task configurations with proper inputs",
+            "2. For command_executor: use full commands (e.g., 'python script.py --arg value', not just 'script.py')",
+            "3. For rest_executor: use complete URLs and proper HTTP methods",
+            "4. Include all required input parameters based on executor schemas",
+            "5. Set appropriate dependencies to ensure correct execution order",
+            "6. Return ONLY a JSON array, no markdown code blocks, no explanations.",
             "",
+            "=== Output ===",
+            "Return ONLY a JSON array of task objects. No markdown, no explanations.",
+            "Ensure: single root, valid references, proper dependencies, complete and realistic inputs.",
         ]
         
         if user_id:
-            prompt_parts.append(f"Note: Use user_id='{user_id}' for all tasks.")
-            prompt_parts.append("")
+            prompt_parts.append(f"Use user_id='{user_id}' for all tasks.")
         
         return "\n".join(prompt_parts)
     
