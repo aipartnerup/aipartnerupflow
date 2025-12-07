@@ -180,6 +180,17 @@ def load_skills() -> list[AgentSkill]:
         )
     )
     
+    # Task generation
+    skills.append(
+        AgentSkill(
+            id="tasks.generate",
+            name="Generate Task Tree",
+            description="Generate a task tree JSON array from natural language requirement using LLM",
+            tags=["task", "generate", "llm", "ai", "automation"],
+            examples=["generate task tree", "create task from requirement", "auto-generate workflow"],
+        )
+    )
+    
     logger.info(f"Loaded {len(skills)} skills successfully")
     return skills
 

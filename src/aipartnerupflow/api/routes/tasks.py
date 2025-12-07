@@ -388,6 +388,9 @@ class TaskRoutes(BaseRouteHandler):
                 # Task copy
                 elif method == "tasks.copy":
                     result = await self.handle_task_copy(params, request, request_id)
+                # Task generation
+                elif method == "tasks.generate":
+                    result = await self.handle_task_generate(params, request, request_id)
                 # Task execution
                 elif method == "tasks.execute":
                     # Use id from request body if available (JSON-RPC compliance), otherwise use generated request_id
@@ -1582,6 +1585,153 @@ class TaskRoutes(BaseRouteHandler):
         except Exception as e:
             logger.error(f"Error copying task: {str(e)}", exc_info=True)
             raise
+    
+    async def handle_task_generate(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> dict:
+        """
+        Handle task tree generation from natural language requirement
+        
+        Uses generate_executor to create a valid task tree structure from natural language.
+        
+        Params:
+            requirement: Natural language requirement for the task tree (required)
+            user_id: Optional user ID for the generated tasks (default: authenticated user or None)
+            llm_provider: Optional LLM provider ("openai" or "anthropic", default: from env or "openai")
+            llm_model: Optional LLM model name (default: from env or provider default)
+            temperature: Optional LLM temperature (default: 0.7)
+            max_tokens: Optional maximum tokens for LLM response (default: 4000)
+            save: Optional boolean, if True, save generated tasks to database (default: False)
+        
+        Returns:
+            {
+                "tasks": List[Dict],  # Generated task tree JSON array
+                "count": int,  # Number of generated tasks
+                "root_task_id": str,  # Only present if save=True
+                "message": str  # Status message
+            }
+        """
+        try:
+            import os
+            from aipartnerupflow.extensions.generate import GenerateExecutor
+            from aipartnerupflow.core.execution.task_executor import TaskExecutor
+            from aipartnerupflow.core.types import TaskTreeNode
+            from aipartnerupflow.core.config import get_task_model_class
+            
+            requirement = params.get("requirement")
+            if not requirement:
+                raise ValueError("Requirement is required")
+            
+            # Get user_id - check permission if provided
+            user_id = params.get("user_id")
+            authenticated_user_id, _ = self._get_user_info(request)
+            
+            if user_id:
+                # Check permission for specified user_id
+                resolved_user_id = self._check_permission(request, user_id, "generate tasks for")
+                if resolved_user_id:
+                    user_id = resolved_user_id
+            else:
+                # Use authenticated user_id or None
+                user_id = authenticated_user_id
+            
+            # Check if LLM API key is available
+            api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "LLM API key not found. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY "
+                    "environment variable or in a .env file."
+                )
+            
+            # Get LLM configuration
+            llm_provider = params.get("llm_provider")
+            llm_model = params.get("llm_model")
+            temperature = params.get("temperature")
+            max_tokens = params.get("max_tokens")
+            
+            # Get database session and create repository
+            db_session = get_default_session()
+            task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+            
+            # Create generate task
+            generate_task = await task_repository.create_task(
+                name="generate_executor",
+                user_id=user_id or "api_user",
+                inputs={
+                    "requirement": requirement,
+                    "user_id": user_id,
+                    "llm_provider": llm_provider,
+                    "llm_model": llm_model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                },
+                schemas={"method": "generate_executor"}  # Required for TaskManager to find executor
+            )
+            
+            # Execute generate_executor
+            task_tree = TaskTreeNode(generate_task)
+            task_executor = TaskExecutor()
+            await task_executor.execute_task_tree(
+                task_tree=task_tree,
+                root_task_id=generate_task.id,
+                db_session=db_session,
+                use_streaming=False
+            )
+            
+            # Get result
+            result_task = await task_repository.get_task_by_id(generate_task.id)
+            
+            if result_task.status == "failed":
+                error_msg = result_task.error or "Unknown error"
+                raise ValueError(f"Task generation failed: {error_msg}")
+            
+            if result_task.status != "completed":
+                raise ValueError(f"Task generation incomplete. Status: {result_task.status}")
+            
+            # Extract generated tasks
+            result_data = result_task.result or {}
+            generated_tasks = result_data.get("tasks", [])
+            
+            if not generated_tasks:
+                raise ValueError("No tasks were generated")
+            
+            # Build response
+            response = {
+                "tasks": generated_tasks,
+                "count": len(generated_tasks),
+                "message": f"Successfully generated {len(generated_tasks)} task(s)"
+            }
+            
+            # Optionally save to database
+            save = params.get("save", False)
+            if save:
+                task_creator = TaskCreator(db_session)
+                final_task_tree = await task_creator.create_task_tree_from_array(generated_tasks)
+                response["root_task_id"] = final_task_tree.task.id
+                response["message"] += f" and saved to database (root_task_id: {final_task_tree.task.id})"
+            
+            logger.info(f"Generated {len(generated_tasks)} task(s) from requirement: {requirement[:100]}...")
+            return response
+            
+        except ImportError as e:
+            error_msg = str(e)
+            if "openai" in error_msg.lower() or "anthropic" in error_msg.lower():
+                raise ValueError(
+                    "LLM package not installed. Please install required package:\n"
+                    "  pip install openai\n"
+                    "  # or\n"
+                    "  pip install anthropic"
+                )
+            raise ValueError(f"Import error: {error_msg}")
+        except ValueError:
+            # Re-raise ValueError as-is (validation errors)
+            raise
+        except Exception as e:
+            logger.error(f"Error generating task tree: {str(e)}", exc_info=True)
+            raise ValueError(f"Failed to generate task tree: {str(e)}")
     
     async def handle_task_execute(
         self,

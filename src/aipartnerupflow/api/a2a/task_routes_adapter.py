@@ -88,6 +88,7 @@ class TaskRoutesAdapter:
                     "tasks.running.count": "tasks.running.count",
                     "tasks.cancel": "tasks.cancel",
                     "tasks.copy": "tasks.copy",
+                    "tasks.generate": "tasks.generate",
                     "tasks.execute": "tasks.execute",
                 }
                 return skill_to_method.get(skill_id, skill_id)
@@ -268,6 +269,8 @@ class TaskRoutesAdapter:
             return await self.task_routes.handle_task_cancel(params, request, request_id)
         elif method == "tasks.copy":
             return await self.task_routes.handle_task_copy(params, request, request_id)
+        elif method == "tasks.generate":
+            return await self.task_routes.handle_task_generate(params, request, request_id)
         elif method == "tasks.execute":
             # tasks.execute is handled separately in agent_executor
             # This should not be called through the adapter

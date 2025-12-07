@@ -787,3 +787,313 @@ class TestHandleTaskDelete:
         # Verify task is not deleted
         assert await task_repository.get_task_by_id(task.id) is not None
 
+
+class TestHandleTaskGenerate:
+    """Test cases for handle_task_generate method"""
+    
+    @pytest.mark.asyncio
+    async def test_generate_basic(self, task_routes, mock_request, use_test_db_session):
+        """Test basic task generation without saving to database"""
+        import os
+        from unittest.mock import patch, AsyncMock, Mock
+        
+        # Mock environment variable for API key
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            params = {
+                "requirement": "Fetch data from API and process it",
+                "user_id": "test_user"
+            }
+            request_id = str(uuid.uuid4())
+            
+            # Mock generate_executor execution
+            mock_generated_tasks = [
+                {
+                    "name": "rest_executor",
+                    "inputs": {"url": "https://api.example.com/data", "method": "GET"},
+                    "priority": 1
+                },
+                {
+                    "name": "command_executor",
+                    "dependencies": [{"id": "task_1", "required": True}],
+                    "inputs": {"command": "python process.py"},
+                    "priority": 2
+                }
+            ]
+            
+            # Mock TaskRepository constructor
+            mock_repository = Mock(spec=TaskRepository)
+            mock_generate_task = Mock()
+            mock_generate_task.id = "generate-task-id"
+            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+            
+            mock_result_task = Mock()
+            mock_result_task.id = "generate-task-id"
+            mock_result_task.status = "completed"
+            mock_result_task.result = {"tasks": mock_generated_tasks}
+            mock_result_task.error = None
+            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+            
+            # Mock TaskExecutor.execute_task_tree
+            mock_executor = Mock()
+            async def mock_execute_task_tree(*args, **kwargs):
+                import asyncio
+                await asyncio.sleep(0.01)
+            mock_executor.execute_task_tree = mock_execute_task_tree
+            
+            with patch('aipartnerupflow.api.routes.tasks.TaskRepository', return_value=mock_repository):
+                with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor', return_value=mock_executor):
+                    result = await task_routes.handle_task_generate(params, mock_request, request_id)
+            
+            # Verify response
+            assert isinstance(result, dict)
+            assert "tasks" in result
+            assert result["tasks"] == mock_generated_tasks
+            assert result["count"] == 2
+            assert "message" in result
+            assert "Successfully generated" in result["message"]
+            assert "root_task_id" not in result  # Not saved to DB
+    
+    @pytest.mark.asyncio
+    async def test_generate_with_save(self, task_routes, mock_request, use_test_db_session):
+        """Test task generation with save=True"""
+        import os
+        from unittest.mock import patch, AsyncMock, Mock
+        
+        # Mock environment variable for API key
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            params = {
+                "requirement": "Fetch data from API and process it",
+                "user_id": "test_user",
+                "save": True
+            }
+            request_id = str(uuid.uuid4())
+            
+            mock_generated_tasks = [
+                {
+                    "name": "rest_executor",
+                    "inputs": {"url": "https://api.example.com/data", "method": "GET"},
+                    "priority": 1
+                }
+            ]
+            
+            # Mock TaskRepository constructor
+            mock_repository = Mock(spec=TaskRepository)
+            mock_generate_task = Mock()
+            mock_generate_task.id = "generate-task-id"
+            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+            
+            mock_result_task = Mock()
+            mock_result_task.id = "generate-task-id"
+            mock_result_task.status = "completed"
+            mock_result_task.result = {"tasks": mock_generated_tasks}
+            mock_result_task.error = None
+            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+            
+            # Mock TaskExecutor.execute_task_tree
+            mock_executor = Mock()
+            async def mock_execute_task_tree(*args, **kwargs):
+                import asyncio
+                await asyncio.sleep(0.01)
+            mock_executor.execute_task_tree = mock_execute_task_tree
+            
+            # Mock TaskCreator.create_task_tree_from_array
+            mock_creator = Mock()
+            mock_root_task = Mock()
+            mock_root_task.id = "root-task-id"
+            mock_task_tree = Mock()
+            mock_task_tree.task = mock_root_task
+            mock_creator.create_task_tree_from_array = AsyncMock(return_value=mock_task_tree)
+            
+            with patch('aipartnerupflow.api.routes.tasks.TaskRepository', return_value=mock_repository):
+                with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor', return_value=mock_executor):
+                    with patch('aipartnerupflow.api.routes.tasks.TaskCreator', return_value=mock_creator):
+                        result = await task_routes.handle_task_generate(params, mock_request, request_id)
+            
+            # Verify response includes root_task_id
+            assert isinstance(result, dict)
+            assert "tasks" in result
+            assert result["count"] == 1
+            assert "root_task_id" in result
+            assert result["root_task_id"] == "root-task-id"
+            assert "saved to database" in result["message"]
+    
+    @pytest.mark.asyncio
+    async def test_generate_missing_requirement(self, task_routes, mock_request):
+        """Test error handling when requirement is missing"""
+        params = {
+            "user_id": "test_user"
+        }
+        request_id = str(uuid.uuid4())
+        
+        with pytest.raises(ValueError, match="Requirement is required"):
+            await task_routes.handle_task_generate(params, mock_request, request_id)
+    
+    @pytest.mark.asyncio
+    async def test_generate_missing_api_key(self, task_routes, mock_request):
+        """Test error handling when LLM API key is missing"""
+        import os
+        from unittest.mock import patch
+        
+        # Ensure no API key in environment
+        with patch.dict(os.environ, {}, clear=True):
+            params = {
+                "requirement": "Fetch data from API",
+                "user_id": "test_user"
+            }
+            request_id = str(uuid.uuid4())
+            
+            with pytest.raises(ValueError, match="LLM API key not found"):
+                await task_routes.handle_task_generate(params, mock_request, request_id)
+    
+    @pytest.mark.asyncio
+    async def test_generate_with_llm_config(self, task_routes, mock_request, use_test_db_session):
+        """Test task generation with LLM configuration parameters"""
+        import os
+        from unittest.mock import patch, AsyncMock, Mock
+        
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            params = {
+                "requirement": "Fetch data from API",
+                "user_id": "test_user",
+                "llm_provider": "openai",
+                "llm_model": "gpt-4o",
+                "temperature": 0.8,
+                "max_tokens": 5000
+            }
+            request_id = str(uuid.uuid4())
+            
+            mock_generated_tasks = [{"name": "rest_executor", "inputs": {}}]
+            
+            # Mock TaskRepository constructor
+            mock_repository = Mock(spec=TaskRepository)
+            mock_generate_task = Mock()
+            mock_generate_task.id = "generate-task-id"
+            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+            
+            mock_result_task = Mock()
+            mock_result_task.id = "generate-task-id"
+            mock_result_task.status = "completed"
+            mock_result_task.result = {"tasks": mock_generated_tasks}
+            mock_result_task.error = None
+            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+            
+            # Mock TaskExecutor.execute_task_tree
+            mock_executor = Mock()
+            async def mock_execute_task_tree(*args, **kwargs):
+                import asyncio
+                await asyncio.sleep(0.01)
+            mock_executor.execute_task_tree = mock_execute_task_tree
+            
+            with patch('aipartnerupflow.api.routes.tasks.TaskRepository', return_value=mock_repository):
+                with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor', return_value=mock_executor):
+                    result = await task_routes.handle_task_generate(params, mock_request, request_id)
+            
+            # Verify LLM config was passed to create_task
+            create_call = mock_repository.create_task.call_args
+            assert create_call is not None
+            inputs = create_call[1]["inputs"]
+            assert inputs["llm_provider"] == "openai"
+            assert inputs["llm_model"] == "gpt-4o"
+            assert inputs["temperature"] == 0.8
+            assert inputs["max_tokens"] == 5000
+    
+    @pytest.mark.asyncio
+    async def test_generate_failed_status(self, task_routes, mock_request, use_test_db_session):
+        """Test error handling when generation task fails"""
+        import os
+        from unittest.mock import patch, AsyncMock, Mock
+        
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            params = {
+                "requirement": "Fetch data from API",
+                "user_id": "test_user"
+            }
+            request_id = str(uuid.uuid4())
+            
+            # Mock TaskRepository constructor
+            mock_repository = Mock(spec=TaskRepository)
+            mock_generate_task = Mock()
+            mock_generate_task.id = "generate-task-id"
+            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+            
+            mock_result_task = Mock()
+            mock_result_task.id = "generate-task-id"
+            mock_result_task.status = "failed"
+            mock_result_task.error = "LLM API error"
+            mock_result_task.result = None
+            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+            
+            # Mock TaskExecutor.execute_task_tree
+            mock_executor = Mock()
+            async def mock_execute_task_tree(*args, **kwargs):
+                import asyncio
+                await asyncio.sleep(0.01)
+            mock_executor.execute_task_tree = mock_execute_task_tree
+            
+            with patch('aipartnerupflow.api.routes.tasks.TaskRepository', return_value=mock_repository):
+                with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor', return_value=mock_executor):
+                    with pytest.raises(ValueError, match="Task generation failed"):
+                        await task_routes.handle_task_generate(params, mock_request, request_id)
+    
+    @pytest.mark.asyncio
+    async def test_generate_no_tasks_generated(self, task_routes, mock_request, use_test_db_session):
+        """Test error handling when no tasks are generated"""
+        import os
+        from unittest.mock import patch, AsyncMock, Mock
+        
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            params = {
+                "requirement": "Fetch data from API",
+                "user_id": "test_user"
+            }
+            request_id = str(uuid.uuid4())
+            
+            # Mock TaskRepository constructor
+            mock_repository = Mock(spec=TaskRepository)
+            mock_generate_task = Mock()
+            mock_generate_task.id = "generate-task-id"
+            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+            
+            mock_result_task = Mock()
+            mock_result_task.id = "generate-task-id"
+            mock_result_task.status = "completed"
+            mock_result_task.result = {"tasks": []}  # Empty tasks array
+            mock_result_task.error = None
+            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+            
+            # Mock TaskExecutor.execute_task_tree
+            mock_executor = Mock()
+            async def mock_execute_task_tree(*args, **kwargs):
+                import asyncio
+                await asyncio.sleep(0.01)
+            mock_executor.execute_task_tree = mock_execute_task_tree
+            
+            with patch('aipartnerupflow.api.routes.tasks.TaskRepository', return_value=mock_repository):
+                with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor', return_value=mock_executor):
+                    with pytest.raises(ValueError, match="No tasks were generated"):
+                        await task_routes.handle_task_generate(params, mock_request, request_id)
+    
+    @pytest.mark.asyncio
+    async def test_generate_with_permission_check(self, task_routes, use_test_db_session):
+        """Test task generation respects permission checks"""
+        import os
+        from unittest.mock import patch, Mock
+        
+        # Create a mock request with user info
+        mock_request = Mock(spec=Request)
+        mock_request.state = Mock()
+        mock_request.state.user_id = "user2"
+        mock_request.state.token_payload = None
+        
+        # Mock permission check to raise ValueError (permission denied)
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            with patch.object(task_routes, '_check_permission', side_effect=ValueError("Permission denied")):
+                params = {
+                    "requirement": "Fetch data from API",
+                    "user_id": "user1"  # Different from authenticated user
+                }
+                request_id = str(uuid.uuid4())
+                
+                with pytest.raises(ValueError, match="Permission denied"):
+                    await task_routes.handle_task_generate(params, mock_request, request_id)
+

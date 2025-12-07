@@ -61,7 +61,7 @@ def task_tree(
     model: Optional[str] = typer.Option(None, "--model", "-m", help="LLM model name"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)"),
     pretty: bool = typer.Option(True, "--pretty/--no-pretty", help="Pretty print JSON output"),
-    save_to_db: bool = typer.Option(False, "--save/--no-save", help="Save generated tasks to database"),
+    save: bool = typer.Option(False, "--save/--no-save", help="Save generated tasks to database"),
 ):
     """
     Generate a task tree JSON array from natural language requirement
@@ -164,7 +164,7 @@ def task_tree(
                 typer.echo(output_json)
             
             # Optionally save to database
-            if save_to_db:
+            if save:
                 from aipartnerupflow.core.execution.task_creator import TaskCreator
                 creator = TaskCreator(db)
                 final_task_tree = await creator.create_task_tree_from_array(generated_tasks)

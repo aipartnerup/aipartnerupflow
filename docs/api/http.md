@@ -513,6 +513,7 @@ JSON-RPC 2.0 format with method-specific parameters:
 - `tasks.running.count` - Get count of running tasks
 - `tasks.cancel` / `tasks.running.cancel` - Cancel running tasks
 - `tasks.copy` - Copy a task tree for re-execution
+- `tasks.generate` - Generate task tree from natural language requirement
 - `tasks.execute` - Execute a task by ID
 
 **Request Headers:**
@@ -1081,6 +1082,195 @@ Creates a new executable copy of an existing task tree for re-execution. This me
 - Use the returned task tree's root ID to execute the copied tasks
 - Failed leaf nodes are automatically handled (pending dependents are filtered out)
 - The copied tree is ready for immediate execution
+
+### `tasks.generate`
+
+**Description:**  
+Generates a valid task tree JSON array from a natural language requirement using LLM (Large Language Model). This method uses the `generate_executor` to create task structures that conform to the framework's requirements. The generated tasks can optionally be saved directly to the database for immediate execution.
+
+**Method:** `tasks.generate`
+
+**Parameters:**
+- `requirement` (string, required): Natural language description of the desired task tree. Should describe the workflow, data flow, and operations needed.
+- `user_id` (string, optional): User ID for the generated tasks. If not provided and JWT is enabled, uses authenticated user's ID. If not provided and JWT is disabled, uses default user ID.
+- `llm_provider` (string, optional): LLM provider to use. Valid values: `"openai"`, `"anthropic"`. Default: `"openai"` or from environment variable `AIPARTNERUPFLOW_LLM_PROVIDER`.
+- `llm_model` (string, optional): Specific LLM model name. Examples: `"gpt-4o"`, `"claude-3-5-sonnet-20241022"`. Default: Provider-specific default or from environment variable `AIPARTNERUPFLOW_LLM_MODEL`.
+- `temperature` (float, optional): LLM temperature for generation (0.0 to 2.0). Higher values make output more creative, lower values more deterministic. Default: `0.7`.
+- `max_tokens` (integer, optional): Maximum number of tokens in LLM response. Default: `4000`.
+- `save` (boolean, optional): If `true`, automatically saves the generated tasks to the database using `TaskCreator.create_task_tree_from_array()`. When `true`, the response includes `root_task_id` of the saved task tree. Default: `false`.
+
+**LLM API Key Configuration:**
+- Set `OPENAI_API_KEY` environment variable for OpenAI provider
+- Set `ANTHROPIC_API_KEY` environment variable for Anthropic provider
+- API keys can also be provided via `.env` file in the project root
+
+**Example Request (Generate Only):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.generate",
+  "params": {
+    "requirement": "Fetch data from API, process it, and save to database",
+    "user_id": "user123"
+  },
+  "id": "generate-request-1"
+}
+```
+
+**Example Request (With LLM Configuration):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.generate",
+  "params": {
+    "requirement": "Create a workflow to fetch user data from REST API, transform it, and store in database",
+    "user_id": "user123",
+    "llm_provider": "openai",
+    "llm_model": "gpt-4o",
+    "temperature": 0.7,
+    "max_tokens": 4000
+  },
+  "id": "generate-request-2"
+}
+```
+
+**Example Request (Save to Database):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.generate",
+  "params": {
+    "requirement": "Fetch data from two APIs in parallel, merge results, and save to database",
+    "user_id": "user123",
+    "save": true
+  },
+  "id": "generate-request-3"
+}
+```
+
+**Example Response (Generate Only):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "generate-request-1",
+  "result": {
+    "tasks": [
+      {
+        "name": "rest_executor",
+        "inputs": {
+          "url": "https://api.example.com/data",
+          "method": "GET"
+        },
+        "priority": 1
+      },
+      {
+        "name": "command_executor",
+        "dependencies": [{"id": "task_1", "required": true}],
+        "inputs": {
+          "command": "python process_data.py --input /tmp/api_response.json"
+        },
+        "priority": 2
+      },
+      {
+        "name": "database_executor",
+        "dependencies": [{"id": "task_2", "required": true}],
+        "inputs": {
+          "table": "processed_data",
+          "data": "{{task_2.result}}"
+        },
+        "priority": 2
+      }
+    ],
+    "count": 3,
+    "message": "Successfully generated 3 task(s)"
+  }
+}
+```
+
+**Example Response (Save to Database):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "generate-request-3",
+  "result": {
+    "tasks": [
+      {
+        "name": "rest_executor",
+        "inputs": {
+          "url": "https://api1.example.com/data",
+          "method": "GET"
+        },
+        "priority": 1
+      },
+      {
+        "name": "rest_executor",
+        "inputs": {
+          "url": "https://api2.example.com/data",
+          "method": "GET"
+        },
+        "priority": 1
+      },
+      {
+        "name": "aggregate_results_executor",
+        "dependencies": [
+          {"id": "task_1", "required": true},
+          {"id": "task_2", "required": true}
+        ],
+        "inputs": {
+          "tasks": ["task_1", "task_2"]
+        },
+        "priority": 2
+      }
+    ],
+    "count": 3,
+    "root_task_id": "generated-root-task-abc-123",
+    "message": "Successfully generated 3 task(s) and saved to database (root_task_id: generated-root-task-abc-123)"
+  }
+}
+```
+
+**Response Fields:**
+- `tasks` (array): Generated task tree JSON array. Each task object follows the standard task format with `name`, `inputs`, `dependencies`, `priority`, etc.
+- `count` (integer): Number of tasks generated
+- `root_task_id` (string, optional): Present only when `save=true`. The ID of the root task in the saved task tree.
+- `message` (string): Status message describing the generation result
+
+**Error Cases:**
+- Missing `requirement`: Returns error with code -32602, message "Requirement is a mandatory input for tasks.generate."
+- Missing LLM API key: Returns error with code -32602, message "LLM API key not found. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable or in a .env file."
+- LLM generation failed: Returns error with code -32602, includes error details from LLM API
+- Validation failed: Returns error with code -32602, includes validation error details
+- Permission denied: Returns error with code -32001 (if JWT is enabled and user cannot generate tasks for specified user_id)
+
+**Validation:**
+The generated tasks are automatically validated to ensure they conform to `TaskCreator.create_task_tree_from_array()` requirements:
+- All tasks have `name` field matching available executor IDs
+- Either all tasks have `id` field or none do (no mixing)
+- All `parent_id` references exist in the array
+- All `dependencies` references exist in the array
+- No circular dependencies
+- Single root task (task with no `parent_id`)
+- All tasks are reachable from the root task
+
+**Notes:**
+- The LLM uses framework documentation and available executor information to generate appropriate task structures
+- Generated tasks use realistic input parameters based on executor schemas
+- For better results, provide detailed requirements describing:
+  - Data flow between steps
+  - Parallel vs sequential operations
+  - Specific operations (API calls, database operations, file processing, etc.)
+- When `save=true`, the generated tasks are immediately saved and ready for execution
+- Use the returned `tasks` array with `TaskCreator.create_task_tree_from_array()` if you need custom processing before saving
+- The method respects permission checks if JWT is enabled
+- LLM API keys are never stored in the database, only used during generation
+- Generation may take several seconds depending on LLM provider and model
+
+**Tips for Better Generation:**
+- Use specific keywords: "parallel", "sequential", "merge", "aggregate" help guide the generation
+- Describe data flow: Explain how data moves between steps
+- Mention executors: Specify operations like "API", "database", "file", "command" for better executor selection
+- Be detailed: More context leads to more accurate task trees
+- Example: "Fetch data from two different APIs in parallel, then merge the results and save to database"
 
 ### `tasks.list`
 

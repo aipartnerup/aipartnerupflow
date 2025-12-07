@@ -144,17 +144,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - LLM prompt engineering with framework context, executor information, and examples
   - JSON response parsing with markdown code block support
   - Can be used through both API and CLI as a standard executor
+  - **API Endpoint**: `tasks.generate` method via JSON-RPC `/tasks` endpoint
+    - Supports all LLM configuration parameters (provider, model, temperature, max_tokens)
+    - Optional `save` parameter to automatically save generated tasks to database
+    - Returns generated task tree JSON array with count and status message
+    - Full test coverage with 8 API endpoint test cases
+  - **CLI Command**: `apflow generate task-tree` for direct task tree generation
+    - Supports output to file or stdout
+    - Optional database persistence with `--save` flag
+    - Comprehensive test command examples in documentation
   - Configuration via environment variables or input parameters:
     - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for LLM authentication
     - `AIPARTNERUPFLOW_LLM_PROVIDER` for provider selection (default: openai)
     - `AIPARTNERUPFLOW_LLM_MODEL` for model selection
-  - Full test coverage with 28+ test cases
-  - Usage example:
+  - Full test coverage with 28+ executor test cases and 8 API endpoint test cases
+  - Usage examples:
     ```python
+    # Python API
     task = await task_manager.task_repository.create_task(
         name="generate_executor",
         inputs={"requirement": "Fetch data from API, process it, and save to database"}
     )
+    ```
+    ```json
+    // JSON-RPC API
+    {
+      "jsonrpc": "2.0",
+      "method": "tasks.generate",
+      "params": {
+        "requirement": "Fetch data from API and process it",
+        "save": true
+      }
+    }
+    ```
+    ```bash
+    # CLI
+    apflow generate task-tree "Fetch data from API and process it" --save
     ```
 
 ## [0.4.0] - 2025-12-5
@@ -179,7 +204,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Unified A2A Protocol Task Management**
   - All task management operations now fully supported through A2A Protocol `/` route
-  - Standardized method naming: `tasks.execute`, `tasks.create`, `tasks.get`, `tasks.update`, `tasks.delete`, `tasks.detail`, `tasks.tree`, `tasks.list`, `tasks.children`, `tasks.running.list`, `tasks.running.status`, `tasks.running.count`, `tasks.cancel`, `tasks.copy`
+  - Standardized method naming: `tasks.execute`, `tasks.create`, `tasks.get`, `tasks.update`, `tasks.delete`, `tasks.detail`, `tasks.tree`, `tasks.list`, `tasks.children`, `tasks.running.list`, `tasks.running.status`, `tasks.running.count`, `tasks.cancel`, `tasks.copy`, `tasks.generate`
   - `TaskRoutesAdapter` component bridges A2A Protocol `RequestContext`/`EventQueue` with existing `TaskRoutes` handlers
   - Automatic conversion between A2A Protocol format and internal task representation
   - Real-time task status updates via `TaskStatusUpdateEvent` for all task management operations

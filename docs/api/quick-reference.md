@@ -454,6 +454,8 @@ result = await executor.execute_tasks(
 
 ### Pattern 7: Generate Task Tree from Natural Language
 
+**Python API Usage:**
+
 ```python
 from aipartnerupflow import TaskManager, TaskCreator, create_session
 from aipartnerupflow.core.types import TaskTreeNode
@@ -470,7 +472,7 @@ generate_task = await task_manager.task_repository.create_task(
         "requirement": "Fetch data from API, process it, and save to database",
         "user_id": "user123",
         "llm_provider": "openai",  # Optional
-        "llm_model": "gpt-4"  # Optional
+        "llm_model": "gpt-4o"  # Optional
     }
 )
 
@@ -486,6 +488,34 @@ generated_tasks = result.result["tasks"]
 creator = TaskCreator(db)
 final_task_tree = await creator.create_task_tree_from_array(generated_tasks)
 await task_manager.distribute_task_tree(final_task_tree)
+```
+
+**JSON-RPC API Usage:**
+
+```python
+import requests
+
+# Generate task tree via API
+response = requests.post(
+    "http://localhost:8000/tasks",
+    json={
+        "jsonrpc": "2.0",
+        "method": "tasks.generate",
+        "params": {
+            "requirement": "Fetch data from API, process it, and save to database",
+            "user_id": "user123",
+            "save": True  # Automatically save to database
+        },
+        "id": "generate-1"
+    }
+)
+
+result = response.json()["result"]
+generated_tasks = result["tasks"]
+root_task_id = result.get("root_task_id")  # Present if save=true
+
+# If save=true, tasks are already saved and ready for execution
+# If save=false, use TaskCreator.create_task_tree_from_array(generated_tasks)
 ```
 
 **CLI Usage Examples:**

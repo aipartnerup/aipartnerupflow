@@ -114,6 +114,7 @@ All task management operations are now fully supported through the A2A Protocol 
 - **Task Query**: `tasks.detail`, `tasks.tree`, `tasks.list`, `tasks.children`
 - **Running Tasks**: `tasks.running.list`, `tasks.running.status`, `tasks.running.count`
 - **Task Control**: `tasks.cancel`, `tasks.copy`
+- **Task Generation**: `tasks.generate` (generate task tree from natural language using LLM)
 
 All methods follow the same A2A Protocol JSON-RPC format and return A2A Protocol Task objects with real-time status updates.
 
