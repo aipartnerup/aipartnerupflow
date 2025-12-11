@@ -6,8 +6,10 @@ like task model class and hooks. Components can access configuration without
 passing parameters through multiple layers.
 """
 
-from typing import Optional, Type, List, Callable, Union, Dict
+import os
 from threading import local
+from typing import Callable, Dict, List, Optional, Type
+
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.types import TaskPreHook, TaskPostHook
 from aipartnerupflow.core.utils.logger import get_logger
@@ -21,15 +23,15 @@ _thread_local = local()
 class ConfigRegistry:
     """
     Global configuration registry
-    
+
     This class manages global configuration like:
     - Task model class
     - Pre-execution hooks
     - Post-execution hooks
-    
+
     Uses thread-local storage to support multi-threaded scenarios.
     """
-    
+
     def __init__(self):
         """Initialize empty registry"""
         self._task_model_class: Optional[Type[TaskModel]] = None
@@ -47,16 +49,15 @@ class ConfigRegistry:
         # Demo mode sleep scale factor - multiplies executor-specific _demo_sleep values
         # Default: read from environment variable AIPARTNERUPFLOW_DEMO_SLEEP_SCALE, or 1.0 (no scaling)
         # Example: executor returns _demo_sleep=2.0, global scale=0.5 → actual sleep=1.0s
-        import os
         self._demo_sleep_scale: float = float(os.getenv("AIPARTNERUPFLOW_DEMO_SLEEP_SCALE", "1.0"))
-    
+
     def set_task_model_class(self, task_model_class: Optional[Type[TaskModel]]) -> None:
         """
         Set the global task model class
-        
+
         Args:
             task_model_class: Custom TaskModel class, or None for default
-        
+
         Raises:
             TypeError: If task_model_class is not a subclass of TaskModel
         """
@@ -75,60 +76,64 @@ class ConfigRegistry:
             f"Set global task model class: "
             f"{task_model_class.__name__ if task_model_class else 'TaskModel'}"
         )
-    
+
     def get_task_model_class(self) -> Type[TaskModel]:
         """
         Get the global task model class
-        
+
         Returns:
             TaskModel class (default or custom)
         """
         return self._task_model_class or TaskModel
-    
+
     def register_pre_hook(self, hook: TaskPreHook) -> None:
         """
         Register a pre-execution hook
-        
+
         Args:
             hook: Pre-execution hook function (sync or async)
         """
         if hook not in self._pre_hooks:
             self._pre_hooks.append(hook)
-            logger.debug(f"Registered pre-hook: {hook.__name__ if hasattr(hook, '__name__') else str(hook)}")
-    
+            logger.debug(
+                f"Registered pre-hook: {hook.__name__ if hasattr(hook, '__name__') else str(hook)}"
+            )
+
     def register_post_hook(self, hook: TaskPostHook) -> None:
         """
         Register a post-execution hook
-        
+
         Args:
             hook: Post-execution hook function (sync or async)
         """
         if hook not in self._post_hooks:
             self._post_hooks.append(hook)
-            logger.debug(f"Registered post-hook: {hook.__name__ if hasattr(hook, '__name__') else str(hook)}")
-    
+            logger.debug(
+                f"Registered post-hook: {hook.__name__ if hasattr(hook, '__name__') else str(hook)}"
+            )
+
     def get_pre_hooks(self) -> List[TaskPreHook]:
         """
         Get all registered pre-execution hooks
-        
+
         Returns:
             List of pre-hook functions
         """
         return self._pre_hooks.copy()
-    
+
     def get_post_hooks(self) -> List[TaskPostHook]:
         """
         Get all registered post-execution hooks
-        
+
         Returns:
             List of post-hook functions
         """
         return self._post_hooks.copy()
-    
+
     def set_use_task_creator(self, use_task_creator: bool) -> None:
         """
         Set whether to use TaskCreator for rigorous task creation
-        
+
         Args:
             use_task_creator: If True, use TaskCreator.create_task_tree_from_array for rigorous validation.
                              If False, use quick create mode (not recommended, may have issues).
@@ -136,20 +141,20 @@ class ConfigRegistry:
         """
         self._use_task_creator = use_task_creator
         logger.debug(f"Set use_task_creator: {use_task_creator}")
-    
+
     def get_use_task_creator(self) -> bool:
         """
         Get whether to use TaskCreator for task creation
-        
+
         Returns:
             True if TaskCreator should be used (default), False otherwise
         """
         return self._use_task_creator
-    
+
     def set_require_existing_tasks(self, require_existing_tasks: bool) -> None:
         """
         Set whether to require tasks to exist before execution
-        
+
         Args:
             require_existing_tasks: If True, only execute tasks that already exist in database.
                                   If False (default), create tasks if they don't exist (more convenient).
@@ -157,22 +162,22 @@ class ConfigRegistry:
         """
         self._require_existing_tasks = require_existing_tasks
         logger.debug(f"Set require_existing_tasks: {require_existing_tasks}")
-    
+
     def get_require_existing_tasks(self) -> bool:
         """
         Get whether to require tasks to exist before execution
-        
+
         Returns:
             True if only existing tasks should be executed, False if tasks can be auto-created (default)
         """
         return self._require_existing_tasks
-    
+
     def register_task_tree_hook(self, hook_type: str, hook: Callable) -> None:
         """
         Register a task tree lifecycle hook
-        
+
         Args:
-            hook_type: One of "on_tree_created", "on_tree_started", 
+            hook_type: One of "on_tree_created", "on_tree_started",
                       "on_tree_completed", "on_tree_failed"
             hook: Hook function (sync or async)
                  Signature: async def hook(root_task: TaskModel, *args) -> None
@@ -188,49 +193,49 @@ class ConfigRegistry:
                 f"Registered task tree hook '{hook_type}': "
                 f"{hook.__name__ if hasattr(hook, '__name__') else str(hook)}"
             )
-    
+
     def get_task_tree_hooks(self, hook_type: str) -> List[Callable]:
         """
         Get all registered task tree hooks for a specific hook type
-        
+
         Args:
-            hook_type: One of "on_tree_created", "on_tree_started", 
+            hook_type: One of "on_tree_created", "on_tree_started",
                       "on_tree_completed", "on_tree_failed"
-        
+
         Returns:
             List of hook functions
         """
         return self._task_tree_hooks.get(hook_type, []).copy()
-    
+
     def set_demo_sleep_scale(self, scale: float) -> None:
         """
         Set demo mode sleep scale factor
-        
+
         This multiplies executor-specific _demo_sleep values to adjust demo execution time.
         Each executor can define its own sleep time via _demo_sleep in get_demo_result(),
         and this global scale factor is applied to all of them.
-        
+
         Examples:
             - scale=1.0: No scaling (use executor's _demo_sleep as-is)
             - scale=0.5: Half the sleep time (faster for testing)
             - scale=2.0: Double the sleep time (slower for realistic simulation)
             - scale=0.0: No sleep at all (fastest, ignores executor _demo_sleep)
-        
+
         Args:
             scale: Scale factor (default: 1.0, or from AIPARTNERUPFLOW_DEMO_SLEEP_SCALE env var)
         """
         self._demo_sleep_scale = float(scale)
         logger.debug(f"Set demo_sleep_scale: {scale}")
-    
+
     def get_demo_sleep_scale(self) -> float:
         """
         Get demo mode sleep scale factor
-        
+
         Returns:
             Scale factor (default: 1.0, or from AIPARTNERUPFLOW_DEMO_SLEEP_SCALE env var)
         """
         return self._demo_sleep_scale
-    
+
     def clear(self) -> None:
         """Clear all configuration (useful for testing)"""
         self._task_model_class = None
@@ -251,10 +256,10 @@ _global_registry = ConfigRegistry()
 def _get_registry() -> ConfigRegistry:
     """
     Get the current configuration registry
-    
+
     Uses a singleton pattern with global registry.
     Can be extended to support thread-local storage for multi-threaded scenarios.
-    
+
     Returns:
         ConfigRegistry instance (global singleton)
     """
@@ -264,7 +269,7 @@ def _get_registry() -> ConfigRegistry:
 def get_config() -> ConfigRegistry:
     """
     Get the current configuration registry
-    
+
     Returns:
         ConfigRegistry instance
     """
@@ -274,7 +279,7 @@ def get_config() -> ConfigRegistry:
 def set_task_model_class(task_model_class: Optional[Type[TaskModel]]) -> None:
     """
     Set the global task model class
-    
+
     Args:
         task_model_class: Custom TaskModel class, or None for default
     """
@@ -284,7 +289,7 @@ def set_task_model_class(task_model_class: Optional[Type[TaskModel]]) -> None:
 def get_task_model_class() -> Type[TaskModel]:
     """
     Get the global task model class
-    
+
     Returns:
         TaskModel class (default or custom)
     """
@@ -294,25 +299,26 @@ def get_task_model_class() -> Type[TaskModel]:
 def register_pre_hook(hook: Optional[TaskPreHook] = None) -> Callable:
     """
     Register a pre-execution hook using decorator syntax
-    
+
     Can be used as a decorator:
         @register_pre_hook
         async def my_pre_hook(task):
             ...
-    
+
     Or called directly:
         register_pre_hook(my_pre_hook)
-    
+
     Args:
         hook: Pre-execution hook function (sync or async), or None when used as decorator
-    
+
     Returns:
         Hook function (for decorator usage) or None (for direct call)
     """
+
     def decorator(func: TaskPreHook) -> TaskPreHook:
         _get_registry().register_pre_hook(func)
         return func
-    
+
     if hook is None:
         # Used as decorator: @register_pre_hook
         return decorator
@@ -325,25 +331,26 @@ def register_pre_hook(hook: Optional[TaskPreHook] = None) -> Callable:
 def register_post_hook(hook: Optional[TaskPostHook] = None) -> Callable:
     """
     Register a post-execution hook using decorator syntax
-    
+
     Can be used as a decorator:
         @register_post_hook
         async def my_post_hook(task, inputs, result):
             ...
-    
+
     Or called directly:
         register_post_hook(my_post_hook)
-    
+
     Args:
         hook: Post-execution hook function (sync or async), or None when used as decorator
-    
+
     Returns:
         Hook function (for decorator usage) or None (for direct call)
     """
+
     def decorator(func: TaskPostHook) -> TaskPostHook:
         _get_registry().register_post_hook(func)
         return func
-    
+
     if hook is None:
         # Used as decorator: @register_post_hook
         return decorator
@@ -356,7 +363,7 @@ def register_post_hook(hook: Optional[TaskPostHook] = None) -> Callable:
 def get_pre_hooks() -> List[TaskPreHook]:
     """
     Get all registered pre-execution hooks
-    
+
     Returns:
         List of pre-hook functions
     """
@@ -366,7 +373,7 @@ def get_pre_hooks() -> List[TaskPreHook]:
 def get_post_hooks() -> List[TaskPostHook]:
     """
     Get all registered post-execution hooks
-    
+
     Returns:
         List of post-hook functions
     """
@@ -381,7 +388,7 @@ def clear_config() -> None:
 def set_use_task_creator(use_task_creator: bool) -> None:
     """
     Set whether to use TaskCreator for rigorous task creation
-    
+
     Args:
         use_task_creator: If True, use TaskCreator.create_task_tree_from_array for rigorous validation.
                          If False, use quick create mode (not recommended, may have issues).
@@ -393,7 +400,7 @@ def set_use_task_creator(use_task_creator: bool) -> None:
 def get_use_task_creator() -> bool:
     """
     Get whether to use TaskCreator for task creation
-    
+
     Returns:
         True if TaskCreator should be used (default), False otherwise
     """
@@ -403,7 +410,7 @@ def get_use_task_creator() -> bool:
 def set_require_existing_tasks(require_existing_tasks: bool) -> None:
     """
     Set whether to require tasks to exist before execution
-    
+
     Args:
         require_existing_tasks: If True, only execute tasks that already exist in database.
                               If False (default), create tasks if they don't exist (more convenient).
@@ -415,20 +422,20 @@ def set_require_existing_tasks(require_existing_tasks: bool) -> None:
 def set_demo_sleep_scale(scale: float) -> None:
     """
     Set demo mode sleep scale factor
-    
+
     This multiplies executor-specific _demo_sleep values to adjust demo execution time.
     Each executor can define its own sleep time via _demo_sleep in get_demo_result(),
     and this global scale factor is applied to all of them.
-    
+
     Examples:
         - scale=1.0: No scaling (use executor's _demo_sleep as-is)
         - scale=0.5: Half the sleep time (faster for testing)
         - scale=2.0: Double the sleep time (slower for realistic simulation)
         - scale=0.0: No sleep at all (fastest, ignores executor _demo_sleep)
-    
+
     Args:
         scale: Scale factor (default: 1.0, or from AIPARTNERUPFLOW_DEMO_SLEEP_SCALE env var)
-    
+
     Example:
         from aipartnerupflow.core.config import set_demo_sleep_scale
         set_demo_sleep_scale(0.5)  # Reduce all executor sleep times by half
@@ -439,10 +446,10 @@ def set_demo_sleep_scale(scale: float) -> None:
 def get_demo_sleep_scale() -> float:
     """
     Get demo mode sleep scale factor
-    
+
     Returns:
         Scale factor (default: 1.0, or from AIPARTNERUPFLOW_DEMO_SLEEP_SCALE env var)
-    
+
     Example:
         from aipartnerupflow.core.config import get_demo_sleep_scale
         scale = get_demo_sleep_scale()  # Get current demo sleep scale
@@ -453,7 +460,7 @@ def get_demo_sleep_scale() -> float:
 def get_require_existing_tasks() -> bool:
     """
     Get whether to require tasks to exist before execution
-    
+
     Returns:
         True if only existing tasks should be executed, False if tasks can be auto-created (default)
     """
@@ -463,28 +470,29 @@ def get_require_existing_tasks() -> bool:
 def register_task_tree_hook(hook_type: Optional[str] = None):
     """
     Register a task tree lifecycle hook using decorator syntax
-    
+
     Can be used as a decorator:
         @register_task_tree_hook("on_tree_completed")
         async def on_tree_completed(root_task, status):
             ...
-    
+
     Or called directly:
         register_task_tree_hook("on_tree_completed")(my_hook)
-    
+
     Args:
-        hook_type: One of "on_tree_created", "on_tree_started", 
+        hook_type: One of "on_tree_created", "on_tree_started",
                   "on_tree_completed", "on_tree_failed"
-    
+
     Returns:
         Decorator function or None
     """
+
     def decorator(func: Callable) -> Callable:
         if hook_type is None:
             raise ValueError("hook_type must be provided when using as decorator")
         _get_registry().register_task_tree_hook(hook_type, func)
         return func
-    
+
     if hook_type is None:
         # Used as decorator without parentheses: @register_task_tree_hook
         # This is not supported - hook_type is required
@@ -499,11 +507,11 @@ def register_task_tree_hook(hook_type: Optional[str] = None):
 def get_task_tree_hooks(hook_type: str) -> List[Callable]:
     """
     Get all registered task tree hooks for a specific hook type
-    
+
     Args:
-        hook_type: One of "on_tree_created", "on_tree_started", 
+        hook_type: One of "on_tree_created", "on_tree_started",
                   "on_tree_completed", "on_tree_failed"
-    
+
     Returns:
         List of hook functions
     """
@@ -513,17 +521,18 @@ def get_task_tree_hooks(hook_type: str) -> List[Callable]:
 def task_model_register():
     """
     Decorator to register a custom TaskModel class
-    
+
     Can be used as a decorator:
         @task_model_register()
         class MyTaskModel(TaskModel):
             ...
-    
+
     This automatically calls set_task_model_class() with the decorated class.
-    
+
     Returns:
         Decorator function
     """
+
     def decorator(cls: Type[TaskModel]) -> Type[TaskModel]:
         if not issubclass(cls, TaskModel):
             raise TypeError(
@@ -537,6 +546,7 @@ def task_model_register():
         set_task_model_class(cls)
         logger.debug(f"Registered TaskModel class via decorator: {cls.__name__}")
         return cls
+
     return decorator
 
 
@@ -558,4 +568,3 @@ __all__ = [
     "get_task_tree_hooks",
     "task_model_register",
 ]
-
