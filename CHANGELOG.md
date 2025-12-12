@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **API Module Refactoring for Better Library Usage**
+  - Split `api/main.py` into modular components for improved code organization
+  - New `api/extensions.py`: Extension management module with `initialize_extensions()` and extension configuration
+  - New `api/protocols.py`: Protocol management module with protocol selection and dependency checking
+  - New `api/app.py`: Application creation module with `create_app_by_protocol()` and protocol-specific server creation functions
+  - `api/main.py` now only contains the CLI entry point (`main()` function)
+  - **Benefits**: Better separation of concerns, easier to use in external projects like aipartnerupflow-demo
+  - **Migration**: Import paths updated:
+    - `from aipartnerupflow.api.extensions import initialize_extensions`
+    - `from aipartnerupflow.api.protocols import get_protocol_from_env, check_protocol_dependency`
+    - `from aipartnerupflow.api.app import create_app_by_protocol, create_a2a_server, create_mcp_server`
+  - All existing imports from `api/main` continue to work via re-exports for backward compatibility
+
+- **Enhanced API Server Creation Functions**
+  - Added `auto_initialize_extensions` parameter to `create_a2a_server()` in `api/a2a/server.py`
+  - Matches behavior of `create_app_by_protocol()` for consistent API
+  - Default: `False` (backward compatible)
+  - Added `task_routes_class` parameter to `create_app_by_protocol()` and server creation functions
+  - Supports custom `TaskRoutes` class injection throughout the server creation chain
+  - Enables aipartnerupflow-demo to use standard API functions directly without workarounds
+  - All new parameters are optional with safe defaults for backward compatibility
+
 ### Removed
 - **Examples Module Deprecation**
   - Removed `aipartnerupflow.examples` module from core library
@@ -23,7 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - These methods are no longer available in the API
   - **Migration**: Use aipartnerupflow-demo for demo task initialization
 
-### Added
 - **Executor Metadata API**
   - New `get_executor_metadata(executor_id)` function to query executor metadata
   - New `validate_task_format(task, executor_id)` function to validate tasks against executor schemas

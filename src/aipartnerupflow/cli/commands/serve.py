@@ -24,7 +24,7 @@ def _check_protocol_dependency(protocol: str):
         typer.Exit: If protocol dependencies are not installed or protocol is not supported
     """
     try:
-        from aipartnerupflow.api.main import (
+        from aipartnerupflow.api.protocols import (
             check_protocol_dependency,
             get_protocol_dependency_info,
             get_supported_protocols,
@@ -87,8 +87,8 @@ def _start_server(
         if workers > 1 and not reload:
             typer.echo(f"Starting with {workers} workers")
         
-        # Create app based on protocol using unified function from api/main.py
-        from aipartnerupflow.api.main import create_app_by_protocol
+        # Create app based on protocol using unified function from api/app.py
+        from aipartnerupflow.api.app import create_app_by_protocol
         api_app = create_app_by_protocol(protocol=protocol)
         
         # Run server

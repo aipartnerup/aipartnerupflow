@@ -315,6 +315,7 @@ def create_a2a_server(
     enable_system_routes: bool = True,
     enable_docs: bool = True,
     task_routes_class: Optional[Type[TaskRoutes]] = None,
+    auto_initialize_extensions: bool = False,
 ) -> CustomA2AStarletteApplication:
     """
     Create A2A server instance with configuration
@@ -353,6 +354,9 @@ def create_a2a_server(
         task_routes_class: Optional custom TaskRoutes class to use instead of default TaskRoutes.
                          Allows extending TaskRoutes functionality without monkey patching.
                          Example: task_routes_class=MyCustomTaskRoutes
+        auto_initialize_extensions: If True, automatically initialize all extensions
+                                   before creating the server (default: False).
+                                   This matches the behavior of create_app_by_protocol().
     
     Returns:
         CustomA2AStarletteApplication instance
@@ -365,6 +369,11 @@ def create_a2a_server(
         
         All decorators are available from: from aipartnerupflow import ...
     """
+    # Auto-initialize extensions if requested
+    if auto_initialize_extensions:
+        from aipartnerupflow.api.extensions import initialize_extensions
+        initialize_extensions()
+    
     # Create request handler (reads from config registry)
     # Note: verify_permission_func is not available at this level, will be None
     # Permission checking will be handled at the middleware level

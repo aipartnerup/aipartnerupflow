@@ -5,7 +5,7 @@ Main MCP server that integrates tools, resources, and transports.
 """
 
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Type, TYPE_CHECKING
 from starlette.requests import Request
 from aipartnerupflow.api.mcp.adapter import TaskRoutesAdapter
 from aipartnerupflow.api.mcp.tools import McpToolsRegistry
@@ -13,6 +13,9 @@ from aipartnerupflow.api.mcp.resources import McpResourcesRegistry
 from aipartnerupflow.api.mcp.transport_stdio import StdioTransport
 from aipartnerupflow.api.mcp.transport_http import HttpTransport
 from aipartnerupflow.core.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from aipartnerupflow.api.routes.tasks import TaskRoutes
 
 logger = get_logger(__name__)
 
@@ -25,9 +28,16 @@ class McpServer:
     Supports both stdio and HTTP/SSE transport modes.
     """
     
-    def __init__(self):
-        """Initialize MCP server"""
-        self.adapter = TaskRoutesAdapter()
+    def __init__(self, task_routes_class: Optional["Type[TaskRoutes]"] = None):
+        """
+        Initialize MCP server
+        
+        Args:
+            task_routes_class: Optional custom TaskRoutes class to use instead of default TaskRoutes.
+                             Allows extending TaskRoutes functionality without monkey patching.
+                             Example: task_routes_class=MyCustomTaskRoutes
+        """
+        self.adapter = TaskRoutesAdapter(task_routes_class=task_routes_class)
         self.tools_registry = McpToolsRegistry(self.adapter)
         self.resources_registry = McpResourcesRegistry(self.adapter)
         self.stdio_transport: Optional[StdioTransport] = None

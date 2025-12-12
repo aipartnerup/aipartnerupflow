@@ -587,6 +587,88 @@ python -m aipartnerupflow.api.mcp.server
 }
 ```
 
+## Programmatic Usage
+
+For library usage in external projects (e.g., aipartnerupflow-demo), you can import functions from the modular API components:
+
+### Extension Management
+
+```python
+from aipartnerupflow.api.extensions import initialize_extensions
+
+# Initialize extensions before creating the app
+initialize_extensions(
+    include_stdio=True,
+    include_crewai=True,
+    # ... other extension flags
+)
+```
+
+### Protocol Management
+
+```python
+from aipartnerupflow.api.protocols import (
+    get_protocol_from_env,
+    check_protocol_dependency,
+    get_supported_protocols,
+)
+
+# Get protocol from environment or default
+protocol = get_protocol_from_env()
+
+# Check if protocol dependencies are installed
+check_protocol_dependency(protocol)
+
+# Get list of supported protocols
+protocols = get_supported_protocols()  # ['a2a', 'mcp']
+```
+
+### Application Creation
+
+```python
+from aipartnerupflow.api.app import (
+    create_app_by_protocol,
+    create_a2a_server,
+    create_mcp_server,
+)
+
+# Create app with automatic extension initialization
+app = create_app_by_protocol(
+    protocol="a2a",
+    auto_initialize_extensions=True,
+    task_routes_class=MyCustomTaskRoutes,  # Optional: custom TaskRoutes
+)
+
+# Or create specific server directly
+a2a_app = create_a2a_server(
+    jwt_secret_key="your-secret",
+    base_url="http://localhost:8000",
+    auto_initialize_extensions=True,  # New: auto-initialize extensions
+    task_routes_class=MyCustomTaskRoutes,  # Optional: custom TaskRoutes
+)
+```
+
+### Custom TaskRoutes
+
+You can extend `TaskRoutes` functionality without monkey patching:
+
+```python
+from aipartnerupflow.api.routes.tasks import TaskRoutes
+
+class MyCustomTaskRoutes(TaskRoutes):
+    async def handle_task_create(self, params, request, request_id):
+        # Add custom logic before parent implementation
+        result = await super().handle_task_create(params, request, request_id)
+        # Add custom logic after parent implementation
+        return result
+
+# Use custom TaskRoutes when creating the app
+app = create_app_by_protocol(
+    protocol="a2a",
+    task_routes_class=MyCustomTaskRoutes,
+)
+```
+
 ## Next Steps
 
 - See [HTTP API Reference](../api/http.md) for complete endpoint documentation

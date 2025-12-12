@@ -4,7 +4,7 @@ Adapter for TaskRoutes to MCP interface
 This adapter bridges TaskRoutes (protocol-agnostic task handlers) with MCP protocol.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Type
 from starlette.requests import Request
 from aipartnerupflow.api.routes.tasks import TaskRoutes
 from aipartnerupflow.core.utils.logger import get_logger
@@ -17,10 +17,19 @@ class TaskRoutesAdapter:
     Adapter to convert MCP tool calls to TaskRoutes method calls
     """
     
-    def __init__(self):
-        """Initialize adapter with TaskRoutes instance"""
+    def __init__(self, task_routes_class: Optional[Type[TaskRoutes]] = None):
+        """
+        Initialize adapter with TaskRoutes instance
+        
+        Args:
+            task_routes_class: Optional custom TaskRoutes class to use instead of default TaskRoutes.
+                             Allows extending TaskRoutes functionality without monkey patching.
+                             Example: task_routes_class=MyCustomTaskRoutes
+        """
         from aipartnerupflow.core.config import get_task_model_class
-        self.task_routes = TaskRoutes(
+        # Use provided task_routes_class or default TaskRoutes
+        task_routes_cls = task_routes_class or TaskRoutes
+        self.task_routes = task_routes_cls(
             task_model_class=get_task_model_class(),
             verify_token_func=None,
             verify_permission_func=None

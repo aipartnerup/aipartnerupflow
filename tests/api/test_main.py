@@ -4,14 +4,14 @@ Test main.py API functions: initialize_extensions and create_app_by_protocol
 import os
 import pytest
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
-from aipartnerupflow.api.main import (
+from aipartnerupflow.api.extensions import (
     initialize_extensions,
-    create_app_by_protocol,
-    get_protocol_from_env,
     _is_package_installed,
     _get_extension_enablement_from_env,
     EXTENSION_CONFIG,
 )
+from aipartnerupflow.api.app import create_app_by_protocol
+from aipartnerupflow.api.protocols import get_protocol_from_env
 from aipartnerupflow.core.extensions import get_registry
 
 

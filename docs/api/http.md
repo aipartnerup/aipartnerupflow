@@ -2671,9 +2671,15 @@ from aipartnerupflow.api.a2a.server import create_a2a_server
 app = create_a2a_server(
     verify_token_secret_key="your-secret-key",  # Optional: JWT authentication
     base_url="http://localhost:8000",
-    enable_system_routes=True  # Enable custom routes (default: True)
+    enable_system_routes=True,  # Enable custom routes (default: True)
+    auto_initialize_extensions=False,  # Optional: auto-initialize extensions (default: False)
+    task_routes_class=None,  # Optional: custom TaskRoutes class
 )
 ```
+
+**New Parameters:**
+- `auto_initialize_extensions`: If `True`, automatically calls `initialize_extensions()` before creating the server. Matches behavior of `create_app_by_protocol()`. Default: `False` (backward compatible).
+- `task_routes_class`: Optional custom `TaskRoutes` class to use instead of default. Allows extending TaskRoutes functionality without monkey patching. Default: `None` (uses default `TaskRoutes`).
 
 ### JWT Authentication
 

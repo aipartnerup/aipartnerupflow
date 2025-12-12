@@ -109,11 +109,11 @@ def create_app(
     # For A2A protocol, use the direct function for backward compatibility
     # For other protocols, delegate to the unified protocol handler
     if protocol is None:
-        from aipartnerupflow.api.main import get_protocol_from_env
+        from aipartnerupflow.api.protocols import get_protocol_from_env
         protocol = get_protocol_from_env()
     else:
         protocol = protocol.lower()
-    
+
     if protocol == "a2a":
         # Use direct A2A server creation for backward compatibility
         a2a_server_instance = create_a2a_server(
@@ -121,10 +121,10 @@ def create_app(
             verify_token_algorithm=verify_token_algorithm,
             base_url=base_url,
             enable_system_routes=enable_system_routes,
-    )
+        )
         return a2a_server_instance.build()
     else:
-        # For other protocols, use the unified protocol handler from api/main.py
-        from aipartnerupflow.api.main import create_app_by_protocol
+        # For other protocols, use the unified protocol handler from api/app.py
+        from aipartnerupflow.api.app import create_app_by_protocol
         return create_app_by_protocol(protocol=protocol)
 

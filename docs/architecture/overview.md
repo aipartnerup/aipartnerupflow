@@ -162,13 +162,21 @@ extensions/http_executor/
 ```
 api/                   # Unified API service layer (supports multiple protocols)
 ├── __init__.py        # Unified entry point, backward compatible
-├── main.py            # API service entry point (supports protocol selection)
+├── main.py            # CLI entry point (main() function and uvicorn server)
+├── extensions.py      # Extension management (initialize_extensions, EXTENSION_CONFIG)
+├── protocols.py       # Protocol management (get_protocol_from_env, check_protocol_dependency)
+├── app.py             # Application creation (create_app_by_protocol, create_a2a_server, create_mcp_server)
 ├── a2a/               # A2A Protocol Server implementation
 │   ├── __init__.py    # A2A module exports
-│   ├── server.py      # A2A server creation (formerly a2a_server.py)
+│   ├── server.py      # A2A server creation
 │   ├── agent_executor.py      # A2A agent executor
 │   ├── custom_starlette_app.py # Custom A2A Starlette application
 │   └── event_queue_bridge.py   # Event queue bridge
+├── mcp/               # MCP (Model Context Protocol) Server implementation
+│   ├── __init__.py    # MCP module exports
+│   ├── server.py      # MCP server creation
+│   ├── adapter.py     # TaskRoutes adapter for MCP
+│   └── ...            # Other MCP components
 ├── routes/            # Protocol-agnostic route handlers
 │   ├── __init__.py    # Route handlers exports
 │   ├── base.py        # BaseRouteHandler - shared functionality
