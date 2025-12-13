@@ -318,6 +318,7 @@ def create_a2a_server(
     custom_routes: Optional[List] = None,
     custom_middleware: Optional[List] = None,
     auto_initialize_extensions: bool = False,
+    verify_permission_func: Optional[Any] = None,
 ) -> CustomA2AStarletteApplication:
     """
     Create A2A server instance with configuration
@@ -366,6 +367,11 @@ def create_a2a_server(
         auto_initialize_extensions: If True, automatically initialize all extensions
                                    before creating the server (default: False).
                                    This matches the behavior of create_app_by_protocol().
+        verify_permission_func: Optional function to verify user permissions.
+                               If provided, it will be used to verify user permissions for accessing resources.
+                               If None, permission checking is disabled.
+                               Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
+                               Returns True if user has permission to access target_user_id's resources.
     
     Returns:
         CustomA2AStarletteApplication instance
@@ -384,11 +390,9 @@ def create_a2a_server(
         initialize_extensions()
     
     # Create request handler (reads from config registry)
-    # Note: verify_permission_func is not available at this level, will be None
-    # Permission checking will be handled at the middleware level
     request_handler = _create_request_handler(
         verify_token_func=verify_token_func,
-        verify_permission_func=None,
+        verify_permission_func=verify_permission_func,
         task_routes_class=task_routes_class,
     )
 
@@ -419,6 +423,7 @@ def create_a2a_server(
         agent_card=public_agent_card,
         http_handler=request_handler,
         verify_token_func=verify_token_func,
+        verify_permission_func=verify_permission_func,
         enable_system_routes=enable_system_routes,
         enable_docs=enable_docs,
         task_model_class=final_task_model_class,

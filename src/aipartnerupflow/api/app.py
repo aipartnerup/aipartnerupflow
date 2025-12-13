@@ -32,8 +32,30 @@ def create_a2a_server(
     task_routes_class: Optional["Type[TaskRoutes]"] = None,
     custom_routes: Optional[List] = None,
     custom_middleware: Optional[List] = None,
+    verify_token_func: Optional[Any] = None,
+    verify_permission_func: Optional[Any] = None,
 ) -> Any:
-    """Create A2A Protocol Server"""
+    """
+    Create A2A Protocol Server
+    
+    Args:
+        jwt_secret_key: JWT secret key for token verification (used if verify_token_func is None)
+        jwt_algorithm: JWT algorithm (default: "HS256")
+        base_url: Base URL of the service
+        enable_system_routes: Whether to enable system routes
+        enable_docs: Whether to enable API documentation
+        task_routes_class: Optional custom TaskRoutes class
+        custom_routes: Optional list of custom Starlette Route objects
+        custom_middleware: Optional list of custom Starlette BaseHTTPMiddleware classes
+        verify_token_func: Optional custom JWT token verification function.
+                         If provided, it will be used to verify JWT tokens.
+                         If None and jwt_secret_key is provided, a default verifier will be created.
+                         Signature: verify_token_func(token: str) -> Optional[dict]
+        verify_permission_func: Optional function to verify user permissions.
+                              If provided, it will be used to verify user permissions for accessing resources.
+                              If None, permission checking is disabled.
+                              Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
+    """
     from aipartnerupflow.api.a2a.server import create_a2a_server
 
     # Get TaskModel class from registry for logging
@@ -43,13 +65,14 @@ def create_a2a_server(
 
     logger.info(
         f"A2A Protocol Server configuration: "
-        f"JWT enabled={bool(jwt_secret_key)}, "
+        f"JWT enabled={bool(jwt_secret_key or verify_token_func)}, "
         f"System routes={enable_system_routes}, "
         f"Docs={enable_docs}, "
         f"TaskModel={task_model_class.__name__}"
     )
 
     a2a_server_instance = create_a2a_server(
+        verify_token_func=verify_token_func,
         verify_token_secret_key=jwt_secret_key,
         verify_token_algorithm=jwt_algorithm,
         base_url=base_url,
@@ -58,6 +81,7 @@ def create_a2a_server(
         task_routes_class=task_routes_class,
         custom_routes=custom_routes,
         custom_middleware=custom_middleware,
+        verify_permission_func=verify_permission_func,
     )
 
     # Note: build() is now optional - CustomA2AStarletteApplication is directly ASGI callable
@@ -132,6 +156,8 @@ def create_app_by_protocol(
     task_routes_class: Optional["Type[TaskRoutes]"] = None,
     custom_routes: Optional[List] = None,
     custom_middleware: Optional[List] = None,
+    verify_token_func: Optional[Any] = None,
+    verify_permission_func: Optional[Any] = None,
 ) -> Any:
     """
     Create application based on protocol type
@@ -154,6 +180,14 @@ def create_app_by_protocol(
                           Middleware will be added in the order provided, after default middleware (CORS, LLM API key, JWT).
                           Each middleware class should be a subclass of BaseHTTPMiddleware.
                           Example: [MyCustomMiddleware, AnotherMiddleware]
+        verify_token_func: Optional custom JWT token verification function.
+                         If provided, it will be used to verify JWT tokens.
+                         If None and AIPARTNERUPFLOW_JWT_SECRET_KEY is set, a default verifier will be created.
+                         Signature: verify_token_func(token: str) -> Optional[dict]
+        verify_permission_func: Optional function to verify user permissions.
+                               If provided, it will be used to verify user permissions for accessing resources.
+                               If None, permission checking is disabled.
+                               Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
 
     Returns:
         Starlette/FastAPI application instance
@@ -204,6 +238,8 @@ def create_app_by_protocol(
             task_routes_class=task_routes_class,
             custom_routes=custom_routes,
             custom_middleware=custom_middleware,
+            verify_token_func=verify_token_func,
+            verify_permission_func=verify_permission_func,
         )
     elif protocol == "mcp":
         return create_mcp_server(

@@ -141,6 +141,14 @@ def create_runnable_app(**kwargs):
             - custom_routes: Optional list of custom Starlette Route objects
             - custom_middleware: Optional list of custom Starlette BaseHTTPMiddleware classes
             - task_routes_class: Optional custom TaskRoutes class
+            - verify_token_func: Optional custom JWT token verification function.
+                              If provided, it will be used to verify JWT tokens.
+                              If None and AIPARTNERUPFLOW_JWT_SECRET_KEY is set, a default verifier will be created.
+                              Signature: verify_token_func(token: str) -> Optional[dict]
+            - verify_permission_func: Optional function to verify user permissions.
+                                    If provided, it will be used to verify user permissions for accessing resources.
+                                    If None, permission checking is disabled.
+                                    Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
             - auto_initialize_extensions: If True, automatically initialize extensions (default: True)
             - And any other arguments supported by create_app_by_protocol()
     
@@ -231,6 +239,14 @@ def main(**kwargs):
                 - custom_routes: Optional list of custom Starlette Route objects
                 - custom_middleware: Optional list of custom Starlette BaseHTTPMiddleware classes
                 - task_routes_class: Optional custom TaskRoutes class
+                - verify_token_func: Optional custom JWT token verification function.
+                                  If provided, it will be used to verify JWT tokens.
+                                  If None and AIPARTNERUPFLOW_JWT_SECRET_KEY is set, a default verifier will be created.
+                                  Signature: verify_token_func(token: str) -> Optional[dict]
+                - verify_permission_func: Optional function to verify user permissions.
+                                        If provided, it will be used to verify user permissions for accessing resources.
+                                        If None, permission checking is disabled.
+                                        Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
                 - auto_initialize_extensions: If True, automatically initialize extensions (default: True)
             - Server configuration (for uvicorn.run()):
                 - host: Server host (default: from AIPARTNERUPFLOW_API_HOST or API_HOST env var, or "0.0.0.0")
