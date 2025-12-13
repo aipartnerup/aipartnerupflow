@@ -13,13 +13,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `api/extensions.py`: Extension management module with `initialize_extensions()` and extension configuration
   - New `api/protocols.py`: Protocol management module with protocol selection and dependency checking
   - New `api/app.py`: Application creation module with `create_app_by_protocol()` and protocol-specific server creation functions
-  - `api/main.py` now only contains the CLI entry point (`main()` function)
+  - `api/main.py` now contains library-friendly entry points (`main()` and `create_runnable_app()` functions)
   - **Benefits**: Better separation of concerns, easier to use in external projects like aipartnerupflow-demo
   - **Migration**: Import paths updated:
     - `from aipartnerupflow.api.extensions import initialize_extensions`
     - `from aipartnerupflow.api.protocols import get_protocol_from_env, check_protocol_dependency`
     - `from aipartnerupflow.api.app import create_app_by_protocol, create_a2a_server, create_mcp_server`
   - All existing imports from `api/main` continue to work via re-exports for backward compatibility
+
+- **Enhanced Library Usage Support in `api/main.py`**
+  - **New `create_runnable_app()` function**: Replaces `create_app()` with clearer naming
+    - Returns a fully initialized, runnable application instance
+    - Handles all initialization steps: .env loading, extension initialization, custom TaskModel loading, examples initialization
+    - Supports custom routes, middleware, and TaskRoutes class via `**kwargs`
+    - Can be used when you need the app object but want to run the server yourself
+    - Usage: `from aipartnerupflow.api.main import create_runnable_app; app = create_runnable_app()`
+  - **Enhanced `main()` function**: Now fully supports library usage
+    - Can be called directly from external projects with custom configuration
+    - Separates application configuration (passed to `create_runnable_app()`) from server configuration (uvicorn parameters)
+    - Supports all uvicorn parameters: `host`, `port`, `workers`, `loop`, `limit_concurrency`, `limit_max_requests`, `access_log`
+    - Usage: `from aipartnerupflow.api.main import main; main(custom_routes=[...], port=8080)`
+  - **Smart .env File Loading**: New `_load_env_file()` function with priority-based discovery
+    - Priority order: 1) Current working directory, 2) Main script's directory, 3) Library's own directory (development only)
+    - Ensures that when used as a library, it loads `.env` from the consuming project, not from the library's installation directory
+    - Respects existing environment variables (`override=False`)
+    - Gracefully handles missing `python-dotenv` package
+  - **Development Environment Setup**: New `_setup_development_environment()` function
+    - Only runs when executing library's own `main.py` directly (not when installed as package)
+    - Suppresses specific warnings for cleaner output
+    - Adds project root to Python path for development mode
+    - Does not affect library usage in external projects
+  - **Backward Compatibility**: All existing code continues to work
+    - `create_app()` name deprecated but still available via alias
+    - All initialization steps remain the same, just better organized
 
 - **Enhanced API Server Creation Functions**
   - Added `auto_initialize_extensions` parameter to `create_a2a_server()` in `api/a2a/server.py`

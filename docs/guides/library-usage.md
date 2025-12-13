@@ -18,30 +18,50 @@ When using `aipartnerupflow` as a library, you need to understand what `main.py`
 
 ### What main.py Does
 
-The `main.py` file in aipartnerupflow performs several initialization steps:
+The `main.py` file in aipartnerupflow provides two main functions for library usage:
 
-1. **Load .env file** - Loads environment variables from `.env` file
-2. **Suppress warnings** - Suppresses specific warnings for cleaner output
-3. **Initialize extensions** - Registers all available executors, hooks, and storage backends
-4. **Load custom TaskModel** - Loads custom TaskModel class from environment variable
-5. **Create application** - Creates the API application with proper configuration
-6. **Run server** - Starts the uvicorn server
+1. **`create_runnable_app()`** - Creates a fully initialized application instance
+   - Loads `.env` file from the calling project's directory (not library's directory)
+   - Initializes extensions (executors, hooks, storage backends)
+   - Loads custom TaskModel if specified
+   - Auto-initializes examples if database is empty
+   - Creates the API application with proper configuration
+   - Returns the app instance (you run the server yourself)
+
+2. **`main()`** - Complete entry point that handles everything and runs the server
+   - Does everything `create_runnable_app()` does
+   - Additionally runs the uvicorn server with configurable parameters
 
 ### Why You Need These Steps
 
 - **Extensions initialization**: Without this, executors (like `crewai_executor`, `command_executor`) won't be available
 - **Custom TaskModel**: Allows you to extend the TaskModel with custom fields
 - **Database configuration**: Ensures database connection is set up before the app starts
+- **Smart .env loading**: Automatically loads `.env` from your project directory when used as a library
 
-### Solution: Use `setup_app()`
+### Solution: Use `main()` or `create_runnable_app()`
 
-Instead of manually implementing all these steps, use the `setup_app()` function which handles everything automatically:
+Instead of manually implementing all these steps, use the provided functions:
 
 ```python
-from aipartnerupflow.api import setup_app
+# Option 1: Complete solution (recommended for most cases)
+from aipartnerupflow.api.main import main
 
-# This one function does everything main.py does!
-app = setup_app()
+# This handles everything and runs the server
+if __name__ == "__main__":
+    main()
+```
+
+```python
+# Option 2: Get app instance and run server yourself
+from aipartnerupflow.api.main import create_runnable_app
+import uvicorn
+
+# This handles initialization and returns the app
+app = create_runnable_app()
+
+# Run with custom uvicorn configuration
+uvicorn.run(app, host="0.0.0.0", port=8080)
 ```
 
 If you need more control, you can manually call each step (see Option B in Basic Setup).
@@ -101,7 +121,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-**Note**: `create_runnable_app()` is the recommended function name. There's also `setup_app()` in `aipartnerupflow.api` which provides similar functionality.
+**Note**: `create_runnable_app()` is the recommended function for getting the app instance. For complete server startup, use `main()` instead.
 
 **Option B: Manual Setup (More Control)**
 
@@ -227,7 +247,7 @@ if __name__ == "__main__":
     main(custom_routes=custom_routes)
 ```
 
-**Using `create_runnable_app()` or `setup_app()`:**
+**Using `create_runnable_app()`:**
 
 ```python
 from aipartnerupflow.api.main import create_runnable_app
@@ -298,7 +318,7 @@ if __name__ == "__main__":
     )
 ```
 
-**Using `create_runnable_app()` or `setup_app()`:**
+**Using `create_runnable_app()`:**
 
 ```python
 from aipartnerupflow.api.main import create_runnable_app
@@ -348,30 +368,22 @@ app = create_app_by_protocol(
 
 ## Complete Example
 
-Here's a complete example combining all features using `setup_app()`:
+Here's a complete example combining all features using `create_runnable_app()`:
 
 ```python
 """
 aipartnerupflow-demo: Custom application using aipartnerupflow as a library
 """
-import os
-from pathlib import Path
 from starlette.routing import Route
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 import uvicorn
 
-# Try to load .env file
-try:
-    from dotenv import load_dotenv
-    env_path = Path(__file__).parent / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
-except ImportError:
-    pass
+# Note: .env file is automatically loaded by create_runnable_app()
+# from the calling project's directory (not library's directory)
 
-from aipartnerupflow.api import setup_app
+from aipartnerupflow.api.main import create_runnable_app
 from aipartnerupflow.core.storage.factory import configure_database
 from aipartnerupflow.core.utils.logger import get_logger
 
@@ -522,19 +534,19 @@ This means your custom middleware runs **after** the default middleware, so it c
 
 ## Quick Reference: What main.py Does
 
-For reference, here's what `aipartnerupflow.api.main.main()` does:
+For reference, here's what `aipartnerupflow.api.main.main()` and `create_runnable_app()` do:
 
-1. ✅ Loads `.env` file
-2. ✅ Suppresses warnings
+1. ✅ Loads `.env` file (from calling project's directory when used as library)
+2. ✅ Sets up development environment (only when running library's own main.py directly)
 3. ✅ Initializes extensions (`initialize_extensions()`)
 4. ✅ Loads custom TaskModel (`_load_custom_task_model()`)
-5. ✅ Auto-initializes examples (deprecated, skipped)
+5. ✅ Auto-initializes examples if database is empty
 6. ✅ Creates app (`create_app_by_protocol()`)
-7. ✅ Runs uvicorn server
+7. ✅ Runs uvicorn server (only in `main()`, not in `create_runnable_app()`)
 
-**Using `setup_app()`**: Steps 3-5 are handled automatically.
+**Using `main()` or `create_runnable_app()`**: All steps are handled automatically.
 
-**Manual setup**: You need to call steps 3-5 yourself before creating the app.
+**Manual setup**: You need to call steps 3-5 yourself before creating the app (see Option B in Basic Setup).
 
 See `docs/guides/library-usage-example.py` for a complete working example.
 
