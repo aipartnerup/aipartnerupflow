@@ -24,6 +24,7 @@ from typing import Optional
 from aipartnerupflow.api.app import create_app_by_protocol
 from aipartnerupflow.api.extensions import initialize_extensions, _auto_init_examples_if_needed, _load_custom_task_model
 from aipartnerupflow.api.protocols import get_protocol_from_env
+from aipartnerupflow.core.storage.factory import get_default_session
 from aipartnerupflow.core.utils.logger import get_logger
 
 # Initialize logger early
@@ -206,6 +207,43 @@ def create_runnable_app(**kwargs):
 
     # Load custom TaskModel if specified
     _load_custom_task_model()
+
+    # Initialize database connection and create tables if needed
+    # This ensures tables are created when DATABASE_URL is set
+    try:
+        from sqlalchemy.ext.asyncio import AsyncSession
+        from sqlalchemy import create_engine
+        from aipartnerupflow.core.storage.sqlalchemy.models import Base
+        from aipartnerupflow.core.storage.factory import _get_database_url_from_env, is_postgresql_url, normalize_postgresql_url
+        
+        # Check if DATABASE_URL is set
+        db_url = _get_database_url_from_env()
+        if db_url and is_postgresql_url(db_url):
+            # For PostgreSQL, create tables using sync connection (simpler and more reliable)
+            # Table creation only needs to happen once, so sync mode is fine
+            connection_string = normalize_postgresql_url(db_url, async_mode=False)
+            sync_engine = create_engine(connection_string, echo=False)
+            try:
+                Base.metadata.create_all(sync_engine)
+                logger.info("Database tables created successfully")
+            except Exception as e:
+                logger.warning(f"Could not create tables automatically: {e}")
+            finally:
+                sync_engine.dispose()
+        else:
+            # For DuckDB or when no DATABASE_URL, get_default_session will handle it
+            session = get_default_session()
+            logger.info("Database connection initialized and tables created if needed")
+            # Close the session immediately since we just needed table creation
+            if not isinstance(session, AsyncSession):
+                try:
+                    session.close()
+                except Exception:
+                    pass  # Ignore close errors
+    except Exception as e:
+        # Don't fail startup if database initialization fails
+        # This allows the server to start even if database is not available
+        logger.warning(f"Database initialization skipped: {e}")
 
     # Auto-initialize examples data if database is empty
     _auto_init_examples_if_needed()

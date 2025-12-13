@@ -253,9 +253,25 @@ def create_session(
     if engine:
         try:
             if async_mode:
-                # For async, create tables using sync_engine
-                if hasattr(engine, 'sync_engine'):
-                    Base.metadata.create_all(engine.sync_engine)
+                # For async, create tables using async context
+                # We need to use asyncio.run() since this is a sync function
+                import asyncio
+                async def create_tables_async():
+                    async with engine.begin() as conn:
+                        await conn.run_sync(Base.metadata.create_all)
+                # Check if we're already in an event loop
+                try:
+                    loop = asyncio.get_running_loop()
+                    # If we're in an event loop, we can't use asyncio.run()
+                    # In this case, we'll skip table creation here and let it happen later
+                    # when the async session is actually used (e.g., in main.py)
+                    logger.debug("Skipping async table creation (already in event loop, will be created in main.py)")
+                except RuntimeError:
+                    # No event loop running, we can use asyncio.run()
+                    try:
+                        asyncio.run(create_tables_async())
+                    except Exception as e:
+                        logger.warning(f"Could not create tables automatically (async): {str(e)}")
             else:
                 Base.metadata.create_all(engine)
         except Exception as e:
