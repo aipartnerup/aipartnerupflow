@@ -184,6 +184,7 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         task_model_class: Optional[Type[TaskModel]] = None,
         task_routes_class: Optional[Type[TaskRoutes]] = None,
         custom_routes: Optional[List[Route]] = None,
+        custom_middleware: Optional[List[Type[BaseHTTPMiddleware]]] = None,
         **kwargs
     ):
         """
@@ -220,6 +221,10 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             custom_routes: Optional list of custom Starlette Route objects to add to the application.
                           Routes are merged after default routes (custom routes can override defaults if needed).
                           If None, no custom routes are added.
+            custom_middleware: Optional list of custom Starlette BaseHTTPMiddleware classes to add to the application.
+                              Middleware will be added in the order provided, after default middleware (CORS, LLM API key, JWT).
+                              Each middleware class should be a subclass of BaseHTTPMiddleware.
+                              Example: [MyCustomMiddleware, AnotherMiddleware]
             **kwargs: Keyword arguments for A2AStarletteApplication
         """
         super().__init__(*args, **kwargs)
@@ -239,6 +244,9 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         
         # Store custom routes
         self.custom_routes = custom_routes or []
+        
+        # Store custom middleware
+        self.custom_middleware = custom_middleware or []
         
         # Use provided task_routes_class or default TaskRoutes
         task_routes_cls = task_routes_class or TaskRoutes
@@ -363,6 +371,12 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             app.add_middleware(JWTAuthenticationMiddleware, verify_token_func=self.verify_token_func)
         else:
             logger.info("JWT authentication is disabled")
+        
+        # Add user-provided custom middleware
+        if self.custom_middleware:
+            for middleware_class in self.custom_middleware:
+                app.add_middleware(middleware_class)
+                logger.info(f"Added custom middleware: {middleware_class.__name__}")
         
         # Cache the built app
         self._built_app = app

@@ -8,7 +8,7 @@ import os
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, AsyncMock, patch
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator, Generator, Optional
 
 # Add project root to Python path for development
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -48,6 +48,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from aipartnerupflow.core.storage.sqlalchemy.models import Base, TaskModel, TASK_TABLE_NAME
 from aipartnerupflow.core.storage.factory import create_session, get_default_session, reset_default_session, set_default_session
+from aipartnerupflow.core.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 # Backward compatibility aliases
 create_storage = create_session
 get_default_storage = get_default_session
@@ -72,9 +76,57 @@ def pytest_configure(config):
     os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
 
 
+def _get_test_database_url() -> Optional[str]:
+    """Get test database URL from environment variable"""
+    return os.getenv("TEST_DATABASE_URL")
+
+
+def _is_postgresql_url(url: str) -> bool:
+    """Check if connection string is PostgreSQL"""
+    return url.startswith("postgresql://") or url.startswith("postgresql+")
+
+
+def _normalize_postgresql_url(url: str, async_mode: bool) -> str:
+    """
+    Normalize PostgreSQL connection string to use appropriate driver
+    
+    Args:
+        url: PostgreSQL connection string
+        async_mode: Whether to use async driver (asyncpg) or sync (psycopg2)
+    
+    Returns:
+        Normalized connection string
+    """
+    # If already has driver specified, use as-is
+    if "+" in url.split("://")[0]:
+        return url
+    
+    # Extract scheme and rest
+    if url.startswith("postgresql://"):
+        rest = url[13:]  # Remove "postgresql://"
+    else:
+        rest = url.split("://", 1)[1] if "://" in url else url
+    
+    # Add appropriate driver
+    if async_mode:
+        return f"postgresql+asyncpg://{rest}"
+    else:
+        return f"postgresql+psycopg2://{rest}"
+
+
 @pytest.fixture(scope="function")
 def temp_db_path():
-    """Create a temporary database file path"""
+    """Create a temporary database file path (only used for DuckDB)"""
+    test_db_url = _get_test_database_url()
+    
+    # If using PostgreSQL, don't create temp file
+    if test_db_url and _is_postgresql_url(test_db_url):
+        logger.info("Using PostgreSQL database for testing")
+        yield None
+        return
+    
+    # Create temporary DuckDB file
+    logger.info("Creating temporary DuckDB file for testing")
     fd, db_path = tempfile.mkstemp(suffix=".duckdb")
     os.close(fd)  # Close file descriptor, we just need the path
     
@@ -82,7 +134,7 @@ def temp_db_path():
     
     # Cleanup - ensure file is removed even if test fails
     try:
-        if os.path.exists(db_path):
+        if db_path and os.path.exists(db_path):
             os.unlink(db_path)
     except Exception:
         pass  # Ignore cleanup errors
@@ -93,102 +145,189 @@ def sync_db_session(temp_db_path):
     """
     Create a synchronous database session for testing
     
+    Supports both DuckDB (default) and PostgreSQL (via TEST_DATABASE_URL).
     Each test gets a fresh database session with automatic cleanup:
     - Tables are created fresh for each test
     - Data is cleaned up after each test to ensure test isolation
     """
-    # Ensure file doesn't exist (cleanup from previous failed test)
-    if os.path.exists(temp_db_path):
-        try:
-            os.unlink(temp_db_path)
-        except Exception:
-            pass
+    test_db_url = _get_test_database_url()
     
-    # Create engine with DuckDB
-    engine = create_engine(
-        f"duckdb:///{temp_db_path}",
-        echo=False
-    )
-    
-    # Create tables fresh for each test
-    Base.metadata.create_all(engine)
-    
-    # Create session
-    SessionLocal = sessionmaker(bind=engine)
-    session = SessionLocal()
-    
-    try:
-        yield session
-    finally:
-        # Cleanup: Rollback any pending transactions
-        try:
-            session.rollback()
-        except Exception:
-            pass
+    # Use PostgreSQL if TEST_DATABASE_URL is set and is PostgreSQL
+    if test_db_url and _is_postgresql_url(test_db_url):
+        logger.info(f"Using PostgreSQL database for testing: {test_db_url}")
+        # Normalize connection string for sync mode
+        connection_string = _normalize_postgresql_url(test_db_url, async_mode=False)
         
-        # Cleanup: Delete all data from tables to ensure test isolation
-        try:
-            # Delete all tasks to ensure test isolation
-            # Note: Using TASK_TABLE_NAME constant for table name
-            session.execute(text(f"DELETE FROM {TASK_TABLE_NAME}"))
-            session.commit()
-        except Exception:
-            session.rollback()
+        # Create engine with PostgreSQL
+        engine = create_engine(connection_string, echo=False)
         
-        # Close session and dispose engine
-        session.close()
-        engine.dispose()
+        # Create tables fresh for each test
+        Base.metadata.create_all(engine)
         
-        # Remove database file
+        # Create session
+        SessionLocal = sessionmaker(bind=engine)
+        session = SessionLocal()
+        
         try:
-            if os.path.exists(temp_db_path):
+            yield session
+        finally:
+            # Cleanup: Rollback any pending transactions
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            
+            # Cleanup: Delete all data from tables to ensure test isolation
+            try:
+                # Delete all tasks to ensure test isolation
+                # Note: Using TASK_TABLE_NAME constant for table name
+                session.execute(text(f"DELETE FROM {TASK_TABLE_NAME}"))
+                session.commit()
+            except Exception:
+                session.rollback()
+            
+            # Close session and dispose engine
+            session.close()
+            engine.dispose()
+    else:
+        # Use DuckDB (default behavior)
+        logger.info(f"Using DuckDB database for testing: {temp_db_path}")
+        # Ensure file doesn't exist (cleanup from previous failed test)
+        if temp_db_path and os.path.exists(temp_db_path):
+            try:
                 os.unlink(temp_db_path)
-        except Exception:
-            pass  # Ignore cleanup errors
+            except Exception:
+                pass
+        
+        # Create engine with DuckDB
+        engine = create_engine(
+            f"duckdb:///{temp_db_path}",
+            echo=False
+        )
+        
+        # Create tables fresh for each test
+        Base.metadata.create_all(engine)
+        
+        # Create session
+        SessionLocal = sessionmaker(bind=engine)
+        session = SessionLocal()
+        
+        try:
+            yield session
+        finally:
+            # Cleanup: Rollback any pending transactions
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            
+            # Cleanup: Delete all data from tables to ensure test isolation
+            try:
+                # Delete all tasks to ensure test isolation
+                # Note: Using TASK_TABLE_NAME constant for table name
+                session.execute(text(f"DELETE FROM {TASK_TABLE_NAME}"))
+                session.commit()
+            except Exception:
+                session.rollback()
+            
+            # Close session and dispose engine
+            session.close()
+            engine.dispose()
+            
+            # Remove database file
+            try:
+                if temp_db_path and os.path.exists(temp_db_path):
+                    os.unlink(temp_db_path)
+            except Exception:
+                pass  # Ignore cleanup errors
 
 
 @pytest_asyncio.fixture(scope="function")
 async def async_db_session(temp_db_path):
     """
-    Create a mock AsyncSession for testing is_async detection
+    Create an async database session for testing
+    
+    Supports both DuckDB (mock) and PostgreSQL (real async session via TEST_DATABASE_URL).
     
     Note: DuckDB doesn't support async drivers, so SQLAlchemy won't allow
-    creating AsyncEngine with DuckDB. This fixture creates a mock AsyncSession
+    creating AsyncEngine with DuckDB. When using DuckDB, this fixture creates a mock AsyncSession
     that properly implements isinstance checks for testing TaskManager's is_async logic.
     
-    In production, PostgreSQL with asyncpg provides true async operations.
-    The is_async detection is sufficient for the codebase since TaskManager
-    uses isinstance(db, AsyncSession) to determine async mode.
+    When TEST_DATABASE_URL is set to PostgreSQL, this fixture creates a real AsyncSession
+    with asyncpg driver, providing true async operations.
     """
-    from unittest.mock import AsyncMock, MagicMock
-    from sqlalchemy.ext.asyncio import AsyncSession
+    test_db_url = _get_test_database_url()
     
-    # Create a mock that will pass isinstance checks
-    # We subclass MagicMock and set __class__ to make isinstance work
-    class MockAsyncSession(AsyncSession):
-        """Mock AsyncSession that passes isinstance checks"""
-        def __init__(self):
-            # Don't call super().__init__() to avoid requiring real engine
+    # Use PostgreSQL if TEST_DATABASE_URL is set and is PostgreSQL
+    if test_db_url and _is_postgresql_url(test_db_url):
+        logger.info(f"Using PostgreSQL database for async testing: {test_db_url}")
+        # Normalize connection string for async mode
+        connection_string = _normalize_postgresql_url(test_db_url, async_mode=True)
+        
+        # Create async engine with PostgreSQL
+        engine = create_async_engine(connection_string, echo=False)
+        
+        # Create tables fresh for each test
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        
+        # Create async session
+        SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        session = SessionLocal()
+        
+        try:
+            yield session
+        finally:
+            # Cleanup: Rollback any pending transactions
+            try:
+                await session.rollback()
+            except Exception:
+                pass
+            
+            # Cleanup: Delete all data from tables to ensure test isolation
+            try:
+                # Delete all tasks to ensure test isolation
+                # Note: Using TASK_TABLE_NAME constant for table name
+                await session.execute(text(f"DELETE FROM {TASK_TABLE_NAME}"))
+                await session.commit()
+            except Exception:
+                await session.rollback()
+            
+            # Close session and dispose engine
+            await session.close()
+            await engine.dispose()
+    else:
+        # Use mock AsyncSession for DuckDB (DuckDB doesn't support async)
+        logger.info("Using mock AsyncSession for DuckDB (DuckDB doesn't support async drivers)")
+        from unittest.mock import AsyncMock, MagicMock
+        from sqlalchemy.ext.asyncio import AsyncSession
+        
+        # Create a mock that will pass isinstance checks
+        # We subclass MagicMock and set __class__ to make isinstance work
+        class MockAsyncSession(AsyncSession):
+            """Mock AsyncSession that passes isinstance checks"""
+            def __init__(self):
+                # Don't call super().__init__() to avoid requiring real engine
+                pass
+        
+        # Create instance and configure mock methods
+        mock_session = MockAsyncSession()
+        mock_session.commit = AsyncMock()
+        mock_session.close = AsyncMock()
+        mock_session.refresh = AsyncMock()
+        mock_session.add = MagicMock()
+        mock_session.get = AsyncMock()
+        mock_session.execute = AsyncMock()
+        mock_session.query = MagicMock()
+        mock_session.bind = None
+        
+        yield mock_session
+        
+        # Cleanup
+        try:
+            await mock_session.close()
+        except Exception:
             pass
-    
-    # Create instance and configure mock methods
-    mock_session = MockAsyncSession()
-    mock_session.commit = AsyncMock()
-    mock_session.close = AsyncMock()
-    mock_session.refresh = AsyncMock()
-    mock_session.add = MagicMock()
-    mock_session.get = AsyncMock()
-    mock_session.execute = AsyncMock()
-    mock_session.query = MagicMock()
-    mock_session.bind = None
-    
-    yield mock_session
-    
-    # Cleanup
-    try:
-        await mock_session.close()
-    except Exception:
-        pass
 
 
 @pytest.fixture(scope="function")

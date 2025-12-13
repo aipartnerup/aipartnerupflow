@@ -3,7 +3,7 @@ A2A server implementation for aipartnerupflow
 """
 
 import httpx
-from typing import Optional, Type, Dict, Any
+from typing import Optional, Type, Dict, Any, List
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import (
     InMemoryTaskStore,
@@ -315,6 +315,8 @@ def create_a2a_server(
     enable_system_routes: bool = True,
     enable_docs: bool = True,
     task_routes_class: Optional[Type[TaskRoutes]] = None,
+    custom_routes: Optional[List] = None,
+    custom_middleware: Optional[List] = None,
     auto_initialize_extensions: bool = False,
 ) -> CustomA2AStarletteApplication:
     """
@@ -354,6 +356,13 @@ def create_a2a_server(
         task_routes_class: Optional custom TaskRoutes class to use instead of default TaskRoutes.
                          Allows extending TaskRoutes functionality without monkey patching.
                          Example: task_routes_class=MyCustomTaskRoutes
+        custom_routes: Optional list of custom Starlette Route objects to add to the application.
+                      Routes are merged after default routes (custom routes can override defaults if needed).
+                      Example: [Route("/custom", custom_handler, methods=["GET"])]
+        custom_middleware: Optional list of custom Starlette BaseHTTPMiddleware classes to add to the application.
+                          Middleware will be added in the order provided, after default middleware (CORS, LLM API key, JWT).
+                          Each middleware class should be a subclass of BaseHTTPMiddleware.
+                          Example: [MyCustomMiddleware, AnotherMiddleware]
         auto_initialize_extensions: If True, automatically initialize all extensions
                                    before creating the server (default: False).
                                    This matches the behavior of create_app_by_protocol().
@@ -414,5 +423,7 @@ def create_a2a_server(
         enable_docs=enable_docs,
         task_model_class=final_task_model_class,
         task_routes_class=task_routes_class,
+        custom_routes=custom_routes,
+        custom_middleware=custom_middleware,
     )
 

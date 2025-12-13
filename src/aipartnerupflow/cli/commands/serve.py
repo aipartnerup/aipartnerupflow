@@ -87,9 +87,10 @@ def _start_server(
         if workers > 1 and not reload:
             typer.echo(f"Starting with {workers} workers")
         
-        # Create app based on protocol using unified function from api/app.py
-        from aipartnerupflow.api.app import create_app_by_protocol
-        api_app = create_app_by_protocol(protocol=protocol)
+        # Create app using create_runnable_app to ensure full initialization
+        # (includes .env loading, extension initialization, custom TaskModel, etc.)
+        from aipartnerupflow.api.main import create_runnable_app
+        api_app = create_runnable_app(protocol=protocol)
         
         # Run server
         uvicorn.run(

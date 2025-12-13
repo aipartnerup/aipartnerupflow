@@ -5,7 +5,7 @@ This module provides functions to create API applications based on different pro
 """
 
 import os
-from typing import Any, Optional, Type, TYPE_CHECKING
+from typing import Any, Optional, Type, List, TYPE_CHECKING
 
 from aipartnerupflow import __version__
 from aipartnerupflow.api.extensions import initialize_extensions
@@ -30,6 +30,8 @@ def create_a2a_server(
     enable_system_routes: bool,
     enable_docs: bool = True,
     task_routes_class: Optional["Type[TaskRoutes]"] = None,
+    custom_routes: Optional[List] = None,
+    custom_middleware: Optional[List] = None,
 ) -> Any:
     """Create A2A Protocol Server"""
     from aipartnerupflow.api.a2a.server import create_a2a_server
@@ -54,6 +56,8 @@ def create_a2a_server(
         enable_system_routes=enable_system_routes,
         enable_docs=enable_docs,
         task_routes_class=task_routes_class,
+        custom_routes=custom_routes,
+        custom_middleware=custom_middleware,
     )
 
     # Note: build() is now optional - CustomA2AStarletteApplication is directly ASGI callable
@@ -126,6 +130,8 @@ def create_app_by_protocol(
     protocol: Optional[str] = None,
     auto_initialize_extensions: bool = True,
     task_routes_class: Optional["Type[TaskRoutes]"] = None,
+    custom_routes: Optional[List] = None,
+    custom_middleware: Optional[List] = None,
 ) -> Any:
     """
     Create application based on protocol type
@@ -141,6 +147,13 @@ def create_app_by_protocol(
         task_routes_class: Optional custom TaskRoutes class to use instead of default TaskRoutes.
                          Allows extending TaskRoutes functionality without monkey patching.
                          Example: task_routes_class=MyCustomTaskRoutes
+        custom_routes: Optional list of custom Starlette Route objects to add to the application.
+                      Routes are merged after default routes (custom routes can override defaults if needed).
+                      Example: [Route("/custom", custom_handler, methods=["GET"])]
+        custom_middleware: Optional list of custom Starlette BaseHTTPMiddleware classes to add to the application.
+                          Middleware will be added in the order provided, after default middleware (CORS, LLM API key, JWT).
+                          Each middleware class should be a subclass of BaseHTTPMiddleware.
+                          Example: [MyCustomMiddleware, AnotherMiddleware]
 
     Returns:
         Starlette/FastAPI application instance
@@ -176,7 +189,7 @@ def create_app_by_protocol(
         os.getenv("AIPARTNERUPFLOW_ENABLE_DOCS", "true").lower() in ("true", "1", "yes")
     )
     host = os.getenv("AIPARTNERUPFLOW_API_HOST", os.getenv("API_HOST", "0.0.0.0"))
-    port = int(os.getenv("AIPARTNERUPFLOW_API_PORT", os.getenv("PORT", "8000")))
+    port = int(os.getenv("AIPARTNERUPFLOW_API_PORT", os.getenv("API_PORT", "8000")))
     default_url = get_url_with_host_and_port(host, port)
     base_url = os.getenv("AIPARTNERUPFLOW_BASE_URL", default_url)
 
@@ -189,6 +202,8 @@ def create_app_by_protocol(
             enable_system_routes=enable_system_routes,
             enable_docs=enable_docs,
             task_routes_class=task_routes_class,
+            custom_routes=custom_routes,
+            custom_middleware=custom_middleware,
         )
     elif protocol == "mcp":
         return create_mcp_server(

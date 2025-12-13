@@ -18,6 +18,33 @@ logger = get_logger(__name__)
 _default_session: Optional[Union[Session, AsyncSession]] = None
 
 
+def _is_postgresql_url(url: str) -> bool:
+    """Check if connection string is PostgreSQL"""
+    return url.startswith("postgresql://") or url.startswith("postgresql+")
+
+
+def _get_database_url_from_env() -> Optional[str]:
+    """
+    Get database URL from environment variables
+    
+    Checks DATABASE_URL first, then AIPARTNERUPFLOW_DATABASE_URL
+    
+    Returns:
+        Database URL string or None if not set
+    """
+    # Check DATABASE_URL first (standard convention)
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        return db_url
+    
+    # Check AIPARTNERUPFLOW_DATABASE_URL (project-specific)
+    db_url = os.getenv("AIPARTNERUPFLOW_DATABASE_URL")
+    if db_url:
+        return db_url
+    
+    return None
+
+
 def _get_default_db_path() -> str:
     """
     Get default database path.
@@ -43,44 +70,95 @@ def _get_default_db_path() -> str:
 
 
 def create_session(
-    dialect: str = "duckdb",
     connection_string: Optional[str] = None,
     path: Optional[Union[str, Path]] = None,
-    async_mode: bool = True,
+    async_mode: Optional[bool] = None,
     **kwargs
 ) -> Union[Session, AsyncSession]:
     """
     Create database session
     
+    This function automatically detects the database type from the connection string.
+    If connection_string is provided, it will be used directly (supports PostgreSQL with SSL).
+    If connection_string is None, it defaults to DuckDB.
+    
     Args:
-        dialect: Database dialect, default "duckdb", optional "postgresql"
-        connection_string: Connection string (if provided, will be used preferentially)
-        path: Database file path (DuckDB only, default ":memory:")
-        async_mode: Whether to use async mode
-        **kwargs: Database connection parameters
-            - DuckDB: path
-            - PostgreSQL: user, password, host, port, database
+        connection_string: Full database connection string. Examples:
+            - PostgreSQL: "postgresql+asyncpg://user:password@host:port/dbname?sslmode=require"
+            - PostgreSQL with SSL cert: "postgresql+asyncpg://user:password@host:port/dbname?sslrootcert=/path/to/cert"
+            - DuckDB: "duckdb:///path/to/file.duckdb" or "duckdb:///:memory:"
+            If None, defaults to DuckDB using path parameter
+        path: Database file path (DuckDB only, used when connection_string is None)
+            - If None and connection_string is None: uses default persistent path
+            - If ":memory:": uses in-memory database
+            - Otherwise: uses file path
+        async_mode: Whether to use async mode. If None:
+            - For PostgreSQL: defaults to True (async mode)
+            - For DuckDB: defaults to False (sync mode, DuckDB doesn't support async drivers)
+        **kwargs: Additional engine parameters (e.g., pool_size, pool_pre_ping)
     
     Returns:
         Database session (Session or AsyncSession)
     
     Examples:
-        # Default DuckDB in-memory database
+        # Default DuckDB (persistent file)
         session = create_session()
         
-        # DuckDB persisted to file
+        # DuckDB in-memory
+        session = create_session(path=":memory:")
+        
+        # DuckDB file
         session = create_session(path="./data/agentflow.duckdb")
         
-        # PostgreSQL (requires [postgres] installation)
+        # PostgreSQL with connection string (recommended for library usage)
         session = create_session(
-            dialect="postgresql",
-            user="postgres",
-            password="password",
-            host="localhost",
-            port=5432,
-            database="agentflow"
+            connection_string="postgresql+asyncpg://user:password@localhost/dbname"
+        )
+        
+        # PostgreSQL with SSL
+        session = create_session(
+            connection_string="postgresql+asyncpg://user:password@host:port/dbname?sslmode=require"
+        )
+        
+        # PostgreSQL with SSL certificate
+        session = create_session(
+            connection_string="postgresql+asyncpg://user:password@host:port/dbname?sslrootcert=/path/to/ca.crt"
         )
     """
+    # Determine dialect and connection string
+    if connection_string is not None:
+        # Connection string provided - detect dialect from connection string
+        if _is_postgresql_url(connection_string):
+            dialect = "postgresql"
+            # For PostgreSQL, default to async mode if not specified
+            if async_mode is None:
+                async_mode = True
+        elif connection_string.startswith("duckdb://"):
+            dialect = "duckdb"
+            # For DuckDB, default to sync mode if not specified
+            if async_mode is None:
+                async_mode = False
+            # Extract path from duckdb:// URL
+            path = connection_string.replace("duckdb:///", "").replace("duckdb://", "")
+            if path == "" or path == ":memory:":
+                path = ":memory:"
+            else:
+                path = str(Path(path).absolute())
+        else:
+            raise ValueError(
+                f"Unsupported connection string format: {connection_string}. "
+                f"Supported formats: postgresql://..., postgresql+asyncpg://..., duckdb://..."
+            )
+    else:
+        # No connection string - use DuckDB with path
+        dialect = "duckdb"
+        if async_mode is None:
+            async_mode = False
+        if path is None:
+            path = _get_default_db_path()
+        elif path != ":memory:":
+            path = str(Path(path).absolute())
+    
     try:
         dialect_config = get_dialect_config(dialect)
     except ValueError:
@@ -92,21 +170,24 @@ def create_session(
             )
             dialect = "duckdb"
             dialect_config = get_dialect_config(dialect)
+            if path is None:
+                path = _get_default_db_path()
+            connection_string = dialect_config.get_connection_string(path=path)
+            async_mode = False
         else:
             raise
     
-    # Generate connection string
+    # Generate connection string if not provided
     if connection_string is None:
         if dialect == "duckdb":
-            if path is None:
-                path = ":memory:"
-            elif path != ":memory:":
-                path = str(Path(path).absolute())
             connection_string = dialect_config.get_connection_string(path=path)
         else:
-            connection_string = dialect_config.get_connection_string(**kwargs)
+            # This should not happen, but handle it gracefully
+            raise ValueError("Connection string is required for PostgreSQL")
     
+    # Get engine kwargs from dialect config and merge with user-provided kwargs
     engine_kwargs = dialect_config.get_engine_kwargs()
+    engine_kwargs.update(kwargs)
     
     # Create engine and session
     if async_mode:
@@ -118,7 +199,7 @@ def create_session(
         session_maker = sessionmaker(engine, class_=Session, expire_on_commit=False)
         session = session_maker()
     
-    logger.info(f"Created {dialect} session: {connection_string}")
+    logger.info(f"Created {dialect} session")
     
     # Ensure tables exist
     if engine:
@@ -136,37 +217,64 @@ def create_session(
 
 
 def get_default_session(
+    connection_string: Optional[str] = None,
     path: Optional[Union[str, Path]] = None,
     async_mode: Optional[bool] = None,
     **kwargs
 ) -> Union[Session, AsyncSession]:
     """
-    Get default database session (singleton, DuckDB)
+    Get default database session (singleton)
+    
+    Supports both DuckDB (default) and PostgreSQL (via connection_string or DATABASE_URL environment variable).
+    
+    This function is designed for library usage - external projects can call this to set up database connection.
     
     Args:
-        path: DuckDB database path. If None:
-              - Uses AIPARTNERUPFLOW_DB_PATH environment variable if set
-              - If examples module is available, uses persistent database at ~/.aipartnerup/data/aipartnerupflow.duckdb
-              - Otherwise, uses ":memory:" (in-memory database)
-        async_mode: Whether to use async mode. If None, defaults to False for DuckDB (sync mode)
-                   since DuckDB doesn't support async drivers
-        **kwargs: Other parameters
+        connection_string: Full database connection string. If provided, uses it directly.
+            If None, checks DATABASE_URL or AIPARTNERUPFLOW_DATABASE_URL environment variable.
+            Examples:
+            - PostgreSQL: "postgresql+asyncpg://user:password@host:port/dbname?sslmode=require"
+            - DuckDB: "duckdb:///path/to/file.duckdb"
+        path: Database file path (DuckDB only, used when connection_string is None).
+            If None:
+              - Checks DATABASE_URL or AIPARTNERUPFLOW_DATABASE_URL environment variable first
+              - If PostgreSQL URL, uses PostgreSQL
+              - Otherwise, uses AIPARTNERUPFLOW_DB_PATH if set
+              - Otherwise, uses persistent database at ~/.aipartnerup/data/aipartnerupflow.duckdb
+        async_mode: Whether to use async mode. If None:
+                   - For PostgreSQL: defaults to True (async mode)
+                   - For DuckDB: defaults to False (sync mode, since DuckDB doesn't support async drivers)
+        **kwargs: Additional engine parameters
     
     Returns:
         Default database session
+    
+    Examples:
+        # Use environment variable DATABASE_URL
+        session = get_default_session()
+        
+        # Programmatically set PostgreSQL connection (for library usage)
+        session = get_default_session(
+            connection_string="postgresql+asyncpg://user:password@localhost/dbname"
+        )
+        
+        # Programmatically set PostgreSQL with SSL
+        session = get_default_session(
+            connection_string="postgresql+asyncpg://user:password@host:port/dbname?sslmode=require&sslrootcert=/path/to/ca.crt"
+        )
+        
+        # Use DuckDB file
+        session = get_default_session(path="./data/app.duckdb")
     """
     global _default_session
     
     if _default_session is None:
-        # Determine database path
-        if path is None:
-            path = _get_default_db_path()
+        # If connection_string not provided, check environment variable
+        if connection_string is None:
+            connection_string = _get_database_url_from_env()
         
-        # DuckDB doesn't support async drivers, so default to sync mode
-        if async_mode is None:
-            async_mode = False
         _default_session = create_session(
-            dialect="duckdb",
+            connection_string=connection_string,
             path=path,
             async_mode=async_mode,
             **kwargs
@@ -177,17 +285,43 @@ def get_default_session(
 
 def set_default_session(session: Union[Session, AsyncSession]):
     """
-    Set default session (mainly for testing)
+    Set default session (for testing or library usage)
+    
+    This function allows external projects to set a custom database session.
+    Useful for testing or when you need to use a pre-configured session.
     
     Args:
         session: Session to set as default
+    
+    Examples:
+        # For library usage - set a custom session
+        from aipartnerupflow.core.storage.factory import set_default_session, create_session
+        
+        session = create_session(
+            connection_string="postgresql+asyncpg://user:password@localhost/dbname"
+        )
+        set_default_session(session)
     """
     global _default_session
     _default_session = session
 
 
 def reset_default_session():
-    """Reset default session (mainly for testing)"""
+    """
+    Reset default session (for testing or reconfiguration)
+    
+    This function allows external projects to reset the default session,
+    useful when you need to reconfigure the database connection.
+    
+    Examples:
+        # Reset and reconfigure
+        from aipartnerupflow.core.storage.factory import reset_default_session, get_default_session
+        
+        reset_default_session()
+        session = get_default_session(
+            connection_string="postgresql+asyncpg://user:password@localhost/dbname"
+        )
+    """
     global _default_session
     if _default_session:
         if isinstance(_default_session, AsyncSession):
@@ -196,6 +330,56 @@ def reset_default_session():
         else:
             _default_session.close()
     _default_session = None
+
+
+def configure_database(
+    connection_string: Optional[str] = None,
+    path: Optional[Union[str, Path]] = None,
+    async_mode: Optional[bool] = None,
+    **kwargs
+) -> Union[Session, AsyncSession]:
+    """
+    Configure and get default database session (convenience function for library usage)
+    
+    This is a convenience function for external projects to configure the database connection.
+    It resets any existing session and creates a new one with the provided configuration.
+    
+    Args:
+        connection_string: Full database connection string. Examples:
+            - PostgreSQL: "postgresql+asyncpg://user:password@host:port/dbname"
+            - PostgreSQL with SSL: "postgresql+asyncpg://user:password@host:port/dbname?sslmode=require"
+            - PostgreSQL with SSL cert: "postgresql+asyncpg://user:password@host:port/dbname?sslrootcert=/path/to/ca.crt"
+            - DuckDB: "duckdb:///path/to/file.duckdb"
+        path: Database file path (DuckDB only, used when connection_string is None)
+        async_mode: Whether to use async mode
+        **kwargs: Additional engine parameters
+    
+    Returns:
+        Configured database session
+    
+    Examples:
+        # Configure PostgreSQL connection (for library usage)
+        from aipartnerupflow.core.storage.factory import configure_database
+        
+        session = configure_database(
+            connection_string="postgresql+asyncpg://user:password@localhost/dbname"
+        )
+        
+        # Configure PostgreSQL with SSL
+        session = configure_database(
+            connection_string="postgresql+asyncpg://user:password@host:port/dbname?sslmode=require&sslrootcert=/path/to/ca.crt"
+        )
+        
+        # Configure DuckDB
+        session = configure_database(path="./data/app.duckdb")
+    """
+    reset_default_session()
+    return get_default_session(
+        connection_string=connection_string,
+        path=path,
+        async_mode=async_mode,
+        **kwargs
+    )
 
 
 # Backward compatibility aliases (deprecated)
