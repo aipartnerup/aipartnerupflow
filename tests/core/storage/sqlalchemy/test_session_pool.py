@@ -5,7 +5,6 @@ This file tests the SessionPoolManager and TaskTreeSession components
 to ensure proper session management, limits, and cleanup.
 """
 import pytest
-pytestmark = pytest.mark.manual
 import asyncio
 import time
 import os
@@ -25,6 +24,8 @@ from aipartnerupflow.core.storage.factory import (
 from aipartnerupflow.core.storage.sqlalchemy.models import Base, TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
+# skip these tests by default
+pytestmark = pytest.mark.manual
 
 class TestSessionPoolManager:
     """Test SessionPoolManager basic functionality"""

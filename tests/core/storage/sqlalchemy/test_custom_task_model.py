@@ -8,7 +8,6 @@ to avoid Base.metadata pollution.
 Run these tests explicitly with: pytest -m no_auto_run
 """
 import pytest
-pytestmark = pytest.mark.manual
 from sqlalchemy import Column, String, Integer
 from aipartnerupflow import (
     set_task_model_class,
@@ -18,6 +17,8 @@ from aipartnerupflow import (
 )
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel, Base
 
+# skip these tests by default
+pytestmark = pytest.mark.manual
 
 class TestTaskModelCustomization:
     """Test TaskModel customization features"""
