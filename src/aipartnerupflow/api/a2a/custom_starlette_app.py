@@ -111,9 +111,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
             # Fallback: try to get token from cookie (for cookie-based auth)
             # Support multiple cookie names for flexibility
             token = (
-                request.cookies.get("Authorization")
-                or request.cookies.get("demo_jwt_token")  # Demo server cookie
-                or request.cookies.get("jwt_token")
+                request.cookies.get("authorization")
                 or request.cookies.get("auth_token")
             )
         
