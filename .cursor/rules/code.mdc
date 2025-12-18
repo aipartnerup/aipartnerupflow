@@ -54,6 +54,7 @@ alwaysApply: true
 - Never create `examples/`, `sample/`, `demo.py`, or similar example files unless I explicitly request them.
 - Do not add unnecessary `.pyi` stubs or pollute `__init__.py` with excessive exports.
 - All comments, docstrings, log messages, and error messages must be in English.
+- When modifying the logic of an existing method, always examine the full surrounding context and thoroughly understand the original intent and behavior before making any changes.
 
 ### Code Formatting
 - Strictly adhere to `ruff` + `black` + `pyright` configuration; zero format or type errors allowed.
