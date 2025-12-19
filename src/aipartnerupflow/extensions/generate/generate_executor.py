@@ -88,11 +88,13 @@ class GenerateExecutor(BaseTask):
             model = inputs.get("model")
             temperature = inputs.get("temperature", 0.7)
             max_tokens = inputs.get("max_tokens", 4000)
+            api_key = inputs.get("api_key")  # Get API key from inputs (injected by pre-hook)
             
             # Create LLM client
             try:
                 llm_client = create_llm_client(
                     provider=llm_provider,
+                    api_key=api_key,  # Pass API key if available (from X-LLM-API-KEY header)
                     model=model
                 )
             except Exception as e:
