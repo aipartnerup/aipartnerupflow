@@ -143,6 +143,8 @@ class SessionPoolManager:
                         path = ":memory:"
                     else:
                         path = str(Path(path).absolute())
+                        # Ensure directory exists before creating connection
+                        _ensure_database_directory_exists(path)
                 else:
                     raise ValueError(
                         f"Unsupported connection string format: {connection_string}. "
@@ -156,6 +158,8 @@ class SessionPoolManager:
                     path = _get_default_db_path()
                 elif path != ":memory:":
                     path = str(Path(path).absolute())
+                    # Ensure directory exists before creating connection
+                    _ensure_database_directory_exists(path)
             
             try:
                 dialect_config = get_dialect_config(dialect)
@@ -422,6 +426,38 @@ def _get_database_url_from_env() -> Optional[str]:
     return None
 
 
+def _ensure_database_directory_exists(db_path: Union[str, Path]) -> None:
+    """
+    Ensure database directory exists before creating connection.
+    
+    DuckDB doesn't automatically create directories, so we need to create
+    the parent directory if the database path contains a directory component.
+    
+    Args:
+        db_path: Database file path (string or Path)
+    """
+    db_file_path = Path(db_path)
+    
+    # Skip if in-memory database
+    if db_path == ":memory:":
+        return
+    
+    # Get parent directory
+    db_dir = db_file_path.parent
+    
+    # Skip if parent is root directory or current directory (no directory component)
+    if db_dir == Path("/") or db_dir == Path("."):
+        return
+    
+    # Create directory if it doesn't exist
+    if not db_dir.exists():
+        try:
+            db_dir.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Created database directory: {db_dir}")
+        except OSError as e:
+            logger.warning(f"Failed to create database directory {db_dir}: {e}")
+
+
 def _get_default_db_path() -> str:
     """
     Get default database path.
@@ -533,6 +569,8 @@ def create_session(
                 path = ":memory:"
             else:
                 path = str(Path(path).absolute())
+                # Ensure directory exists before creating connection
+                _ensure_database_directory_exists(path)
         else:
             raise ValueError(
                 f"Unsupported connection string format: {connection_string}. "
@@ -547,6 +585,8 @@ def create_session(
             path = _get_default_db_path()
         elif path != ":memory:":
             path = str(Path(path).absolute())
+            # Ensure directory exists before creating connection
+            _ensure_database_directory_exists(path)
     
     try:
         dialect_config = get_dialect_config(dialect)
@@ -862,10 +902,15 @@ class PooledSessionContext:
                     path = ":memory:"
                 else:
                     path = str(Path(path).absolute())
+                    # Ensure directory exists before creating connection
+                    _ensure_database_directory_exists(path)
         else:
             # Default to DuckDB
             async_mode = False
             path = _get_default_db_path()
+            # Ensure directory exists (already handled in _get_default_db_path, but ensure for consistency)
+            if path != ":memory:":
+                _ensure_database_directory_exists(path)
         
         self._path = path
         self._async_mode = async_mode
