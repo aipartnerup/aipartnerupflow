@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] 2025-12-21
+
+### Fixed
+- **Documentation Corrections for `schemas.method` Field**
+  - Clarified that `schemas.method` is a required field when `schemas` is provided
+  - Updated documentation to explicitly state that `schemas.method` must match an executor ID from the extensions registry
+  - Fixed all documentation examples to use real executor IDs instead of placeholder values
+  - Updated examples across all documentation files:
+    - `docs/api/http.md`: Replaced generic `"executor_id"` with concrete IDs like `"system_info_executor"`, `"rest_executor"`, `"command_executor"`
+    - `docs/getting-started/quick-start.md`: Updated all task examples to use valid executor IDs
+    - `docs/guides/cli.md`: Fixed CLI command examples with correct executor IDs
+    - `docs/development/design/cli-design.md`: Updated design documentation examples
+    - `docs/development/setup.md`: Fixed setup guide examples
+  - Fixed `generate_executor.py` LLM prompt to correctly instruct LLM to use `schemas.method` (not `name`) as executor ID
+  - Updated task structure examples in LLM prompt to reflect correct usage
+
+- **API Endpoint Test Coverage**
+  - Added missing test cases for API endpoints:
+    - `test_jsonrpc_tasks_list`: Tests `tasks.list` endpoint with pagination
+    - `test_jsonrpc_tasks_running_status`: Tests `tasks.running.status` endpoint with array format
+    - `test_jsonrpc_tasks_running_count`: Tests `tasks.running.count` endpoint
+    - `test_jsonrpc_tasks_cancel`: Tests `tasks.cancel` endpoint with array format
+    - `test_jsonrpc_tasks_generate`: Tests `tasks.generate` endpoint for task tree generation
+  - Fixed test parameter format issues:
+    - `tasks.running.status` and `tasks.cancel` now correctly use `task_ids` array parameter instead of single `task_id`
+    - Tests now expect array responses instead of single object responses
+  - All API endpoints now have comprehensive test coverage
+
+- **CLI Command Test Coverage**
+  - Added `test_tasks_watch` test cases for `tasks watch` CLI command
+    - Uses mock to avoid interactive `Live` display component issues in automated tests
+    - Tests parameter validation and basic functionality
+    - Properly handles error messages in stderr
+
+- **API Documentation Completeness**
+  - Added missing response example for `tasks.running.status` endpoint
+    - Includes complete response format with all fields (task_id, context_id, status, progress, error, is_running, timestamps)
+    - Documents error cases (not_found, permission_denied)
+    - Clarifies that method returns array format even for single task queries
+
+### Added
+- **Comprehensive Documentation Review**
+  - Verified all documentation examples use valid executor IDs
+  - Ensured all examples are functional and can be parsed correctly
+  - Validated that all CLI commands have corresponding test cases
+  - Confirmed API endpoint documentation matches actual implementation
+
 ## [0.7.1] 2025-12-20
 
 ### Fixed
