@@ -130,7 +130,7 @@ extensions/crewai/
 
 **Note**: BatchManager is part of [crewai] because it's specifically designed for batching multiple CrewAI crews together.
 
-#### [http_executor] - HTTP/Remote API Task Execution (Future)
+#### [http_executor] - HTTP/Remote API Task Execution
 
 ```
 extensions/http_executor/
@@ -140,7 +140,7 @@ extensions/http_executor/
 └── types.py            # HTTPExecutorState, RequestConfig, ResponseConfig
 ```
 
-**Installation**: `pip install aipartnerupflow[http]` (future)
+**Installation**: `pip install aipartnerupflow[http]`
 
 **Purpose**: Execute tasks by calling remote HTTP/HTTPS APIs.
 
@@ -152,8 +152,6 @@ extensions/http_executor/
 - Timeout handling
 
 **Use Case**: Tasks that need to call external REST APIs, webhooks, or remote services.
-
-**Note**: This is a future feature. CrewAI is the first task execution implementation.
 
 **Note**: For examples and learning templates, see the test cases in `tests/integration/` and `tests/extensions/`. Test cases serve as comprehensive examples demonstrating real-world usage patterns.
 
@@ -182,7 +180,6 @@ api/                   # Unified API service layer (supports multiple protocols)
 │   ├── base.py        # BaseRouteHandler - shared functionality
 │   ├── tasks.py       # TaskRoutes - task management handlers
 │   └── system.py      # SystemRoutes - system operation handlers
-└── rest/              # REST API (future implementation)
 ```
 
 #### [cli] - CLI Tools
@@ -267,13 +264,13 @@ pip install aipartnerupflow[all]
   - **Not an ExecutableTask** (it's a container, not a task)
 - **Location**: Part of [crewai] because it's specifically for batching CrewAI crews together
 
-#### HTTPExecutor (`extensions/http_executor/http_executor.py`) [http] (Future)
+#### HTTPExecutor (`extensions/http_executor/http_executor.py`) [http]
 - **Responsibility**: Remote HTTP/API call task execution - **ExecutableTask implementation**
 - **Features**:
   - HTTP/HTTPS request execution
   - Retry logic, timeout handling
   - Authentication support
-- **Type**: Task executor (future implementation)
+- **Type**: Task executor
 - **Use Case**: Tasks that call external REST APIs or remote services
 
 #### Custom Tasks (Core)
@@ -285,8 +282,8 @@ pip install aipartnerupflow[all]
 
 #### Built-in Executors (Features)
 - **CrewManager** [crewai]: LLM-based tasks via CrewAI
-- **HTTPExecutor** [http] (Future): Remote API calls via HTTP
-- **Future executors**: Shell executor, database executor, queue executor, etc.
+- **HTTPExecutor** [http]: Remote API calls via HTTP
+- **Future executors**: database executor, queue executor, etc.
 - **Location**: `extensions/` directory
 
 ### 3. Supporting Features

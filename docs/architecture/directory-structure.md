@@ -157,7 +157,7 @@ api/
 │   ├── base.py            # BaseRouteHandler - shared functionality
 │   ├── tasks.py           # TaskRoutes - task management handlers
 │   └── system.py          # SystemRoutes - system operation handlers
-└── rest/                  # REST API (future implementation)
+
 ```
 
 **Route Handlers Architecture**:
