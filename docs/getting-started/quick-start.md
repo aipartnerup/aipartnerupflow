@@ -636,7 +636,7 @@ apflow run flow executor_id --inputs '{"key": "value"}'
 
 **Via CLI (Standard Mode - Task Array):**
 ```bash
-apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "user_id": "user123", "schemas": {"method": "executor_id"}, "inputs": {"key": "value"}, "status": "pending"}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "user_id": "user123", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}, "status": "pending"}]'
 ```
 
 **Via API:**
@@ -651,8 +651,8 @@ curl -X POST http://localhost:8000/ \
         "id": "task1",
         "name": "Task 1",
         "user_id": "user123",
-        "schemas": {"method": "executor_id"},
-        "inputs": {"key": "value"},
+        "schemas": {"method": "system_info_executor"},
+        "inputs": {"resource": "cpu"},
         "status": "pending"
       }]
     },
@@ -669,19 +669,19 @@ Create `tasks.json`:
 [
   {
     "id": "task1",
-    "name": "Task 1",
+    "name": "Get System Info",
     "user_id": "user123",
-    "schemas": {"method": "executor1"},
-    "inputs": {},
+    "schemas": {"method": "system_info_executor"},
+    "inputs": {"resource": "cpu"},
     "status": "pending"
   },
   {
     "id": "task2",
-    "name": "Task 2",
+    "name": "Process Data",
     "user_id": "user123",
     "parent_id": "task1",
-    "schemas": {"method": "executor2"},
-    "inputs": {},
+    "schemas": {"method": "command_executor"},
+    "inputs": {"command": "echo 'Processing system info'"},
     "dependencies": [{"id": "task1", "required": true}],
     "status": "pending"
   }
@@ -704,19 +704,19 @@ curl -X POST http://localhost:8000/ \
       "tasks": [
         {
           "id": "task1",
-          "name": "Task 1",
+          "name": "Get System Info",
           "user_id": "user123",
-          "schemas": {"method": "executor1"},
-          "inputs": {},
+          "schemas": {"method": "system_info_executor"},
+          "inputs": {"resource": "cpu"},
           "status": "pending"
         },
         {
           "id": "task2",
-          "name": "Task 2",
+          "name": "Process Data",
           "user_id": "user123",
           "parent_id": "task1",
-          "schemas": {"method": "executor2"},
-          "inputs": {},
+          "schemas": {"method": "command_executor"},
+          "inputs": {"command": "echo 'Processing system info'"},
           "dependencies": [{"id": "task1", "required": true}],
           "status": "pending"
         }
@@ -737,18 +737,18 @@ Create `parallel_tasks.json`:
 [
   {
     "id": "task1",
-    "name": "Task 1",
+    "name": "Get CPU Info",
     "user_id": "user123",
-    "schemas": {"method": "executor1"},
-    "inputs": {},
+    "schemas": {"method": "system_info_executor"},
+    "inputs": {"resource": "cpu"},
     "status": "pending"
   },
   {
     "id": "task2",
-    "name": "Task 2",
+    "name": "Get Memory Info",
     "user_id": "user123",
-    "schemas": {"method": "executor2"},
-    "inputs": {},
+    "schemas": {"method": "system_info_executor"},
+    "inputs": {"resource": "memory"},
     "status": "pending"
   }
 ]

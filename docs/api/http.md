@@ -120,10 +120,10 @@ JSON-RPC 2.0 format:
         "name": "Task 1",
         "user_id": "user123",
         "schemas": {
-          "method": "executor_id"
+          "method": "system_info_executor"
         },
         "inputs": {
-          "key": "value"
+          "resource": "cpu"
         }
       }
     ]
@@ -487,10 +487,10 @@ JSON-RPC 2.0 format with method-specific parameters:
         "name": "Task 1",
         "user_id": "user123",
         "schemas": {
-          "method": "executor_id"
+          "method": "system_info_executor"
         },
         "inputs": {
-          "key": "value"
+          "resource": "cpu"
         }
       }
     ]
@@ -568,8 +568,12 @@ Creates one or more tasks and automatically executes them as a task tree. This m
 - `priority` (integer, optional): Priority level (0=urgent, 1=high, 2=normal, 3=low). Default: 1
 - `dependencies` (array, optional): Dependency list. Format: `[{"id": "task-id", "required": true}]`. **This determines execution order** - a task executes only when all its required dependencies are satisfied.
 - `inputs` (object, optional): Execution-time input parameters
-- `schemas` (object, optional): Task schemas. Must include `method` field with executor ID
-- `params` (object, optional): Executor initialization parameters
+- `schemas` (object, optional): Task schemas configuration. **If provided, the `method` field is REQUIRED.**
+  - `method` (string, required when `schemas` is provided): **Executor ID** that must exactly match the executor's `id` from the extensions registry (registered via `@executor_register()`). This is the primary way to specify which executor should execute the task. Examples: `"system_info_executor"`, `"command_executor"`, `"rest_executor"`, `"crewai_executor"`, etc.
+  - `type` (string, optional): Executor type for fallback lookup (e.g., `"stdio"`, `"http"`). Only used if `method` is not a registered executor ID.
+  - `input_schema` (object, optional): Input validation schema (JSON Schema format)
+  - `model` (string, optional): Model name for AI executors (e.g., `"gpt-4"`, `"claude-3-opus"`)
+- `params` (object, optional): Executor initialization parameters. Can include `executor_id` as an alternative way to specify the executor (takes precedence over `schemas.method` if provided).
 - Custom fields: Any additional fields supported by your TaskModel
 
 **Example Request:**
@@ -583,10 +587,10 @@ Creates one or more tasks and automatically executes them as a task tree. This m
       "name": "Root Task",
       "user_id": "user123",
       "schemas": {
-        "method": "my_executor"
+        "method": "system_info_executor"
       },
       "inputs": {
-        "data": "test"
+        "resource": "cpu"
       }
     },
     {
@@ -595,9 +599,11 @@ Creates one or more tasks and automatically executes them as a task tree. This m
       "user_id": "user123",
       "parent_id": "root",
       "schemas": {
-        "method": "another_executor"
+        "method": "command_executor"
       },
-      "inputs": {}
+      "inputs": {
+        "command": "echo 'Processing system info'"
+      }
     }
   ],
   "id": "create-request-1"
@@ -694,10 +700,10 @@ Retrieves a task by its ID. Returns the complete task object including all field
     "parent_id": null,
     "priority": 1,
     "dependencies": [],
-    "inputs": {"key": "value"},
-    "result": {"output": "result"},
+    "inputs": {"resource": "cpu"},
+    "result": {"system": "Darwin", "brand": "Apple M1 Pro", "cores": 10},
     "error": null,
-    "schemas": {"method": "executor_id"},
+    "schemas": {"method": "system_info_executor"},
     "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-01T00:05:00Z",
     "started_at": "2024-01-01T00:01:00Z",
@@ -2609,16 +2615,16 @@ curl -X POST http://localhost:8000/tasks \
         "id": "root",
         "name": "Root Task",
         "user_id": "user123",
-        "schemas": {"method": "my_executor"},
-        "inputs": {"data": "test"}
+        "schemas": {"method": "system_info_executor"},
+        "inputs": {"resource": "cpu"}
       },
       {
         "id": "child",
         "name": "Child Task",
         "user_id": "user123",
         "parent_id": "root",
-        "schemas": {"method": "another_executor"},
-        "inputs": {}
+        "schemas": {"method": "command_executor"},
+        "inputs": {"command": "echo 'Processing system info'"}
       }
     ],
     "id": "1"

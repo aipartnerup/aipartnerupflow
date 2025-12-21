@@ -44,9 +44,9 @@ pip install -e ".[all]"
 ```bash
 # Execute a task (no API server needed)
 # Standard mode (recommended):
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
+aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 # Or legacy mode:
-aipartnerupflow run flow executor_id --inputs '{"data": "test"}'
+aipartnerupflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 
 # Query task status (no API server needed)
 aipartnerupflow tasks status task-123
@@ -63,10 +63,10 @@ aipartnerupflow tasks list
 
 ```bash
 # 1. Execute tasks (standard mode - recommended)
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
+aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Or legacy mode (backward compatible)
-aipartnerupflow run flow executor_id --inputs '{"data": "test"}'
+aipartnerupflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 
 # 2. Check status (in another terminal or after execution)
 aipartnerupflow tasks status <task_id>
@@ -127,7 +127,7 @@ aipartnerupflow serve start --port 8000
 aipartnerupflow serve start --port 8000 --protocol mcp
 
 # Terminal 2: Use CLI to execute tasks
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
+aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Terminal 2: Query via CLI (faster, direct DB access)
 aipartnerupflow tasks status <task_id>
@@ -149,7 +149,7 @@ curl http://localhost:8000/api/tasks/<task_id>/status
 ```bash
 # Step 1: Execute tasks in background (standard mode)
 aipartnerupflow run flow \
-  --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]' \
+  --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]' \
   --background \
   --watch
 
@@ -176,7 +176,7 @@ aipartnerupflow tasks cancel abc-123-def-456
 ```bash
 # Step 1: Execute tasks (foreground, wait for completion)
 aipartnerupflow run flow \
-  --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]' \
+  --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]' \
   --output result.json
 
 # Step 2: Check result
@@ -192,9 +192,9 @@ aipartnerupflow tasks status <task_id_from_result>
 # Step 1: Start multiple unrelated tasks in one command
 aipartnerupflow run flow \
   --tasks '[
-    {"id": "task1", "name": "Task 1", "schemas": {"method": "executor1"}, "inputs": {}},
-    {"id": "task2", "name": "Task 2", "schemas": {"method": "executor2"}, "inputs": {}},
-    {"id": "task3", "name": "Task 3", "schemas": {"method": "executor3"}, "inputs": {}}
+    {"id": "task1", "name": "Get CPU Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
+    {"id": "task2", "name": "Get Memory Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "memory"}},
+    {"id": "task3", "name": "Get Disk Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "disk"}}
   ]' \
   --background
 
@@ -223,7 +223,7 @@ aipartnerupflow serve start --port 8000 --reload
 aipartnerupflow serve start --port 8000 --reload --protocol mcp
 
 # Terminal 2: Execute via CLI (standard mode)
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
+aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Terminal 2: Query via CLI (direct DB, fast)
 aipartnerupflow tasks list
@@ -241,18 +241,18 @@ curl http://localhost:8000/api/tasks/<task_id>/status
 
 ```bash
 # Execute single task (task array with one task)
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"key": "value"}}]'
+aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Execute task tree (parent-child relationships)
 aipartnerupflow run flow --tasks '[
-  {"id": "root", "name": "Root Task", "schemas": {"method": "executor1"}, "inputs": {}},
-  {"id": "child1", "name": "Child 1", "parent_id": "root", "schemas": {"method": "executor2"}, "inputs": {}}
+  {"id": "root", "name": "Get System Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
+  {"id": "child1", "name": "Process Info", "parent_id": "root", "schemas": {"method": "command_executor"}, "inputs": {"command": "echo Processing"}]
 ]'
 
 # Execute multiple unrelated tasks (multiple root tasks)
 aipartnerupflow run flow --tasks '[
-  {"id": "task1", "name": "Task 1", "schemas": {"method": "executor1"}, "inputs": {}},
-  {"id": "task2", "name": "Task 2", "schemas": {"method": "executor2"}, "inputs": {}}
+  {"id": "task1", "name": "Get CPU Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
+  {"id": "task2", "name": "Get Memory Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "memory"}}
 ]'
 
 # With tasks file
@@ -602,7 +602,7 @@ CLI uses DuckDB by default - no configuration needed:
 
 ```bash
 # Just use CLI - database is created automatically
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
+aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 ```
 
 Database file location: `~/.aipartnerup/data/aipartnerupflow.duckdb` (or configured path)
@@ -616,7 +616,7 @@ If you want to use PostgreSQL (for production or shared access):
 export DATABASE_URL="postgresql+asyncpg://user:password@localhost/aipartnerupflow"
 
 # Use CLI as normal - it will connect to PostgreSQL
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
+aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 ```
 
 **Note**: Both CLI and API will use the same database connection string, so they share data automatically.
@@ -634,10 +634,10 @@ aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": 
     "name": "Task 1",
     "user_id": "user123",
     "schemas": {
-      "method": "executor_id"  // Executor ID registered via @executor_register()
+      "method": "system_info_executor"  // Executor ID registered via @executor_register()
     },
     "inputs": {
-      "key": "value"
+      "resource": "cpu"
     },
     "parent_id": null,  // null for root tasks
     "priority": 1,
@@ -687,8 +687,8 @@ CLI automatically handles this by:
 ```bash
 # Multiple unrelated tasks (2 root tasks)
 aipartnerupflow run flow --tasks '[
-  {"id": "task1", "name": "Task 1", "schemas": {"method": "executor1"}, "inputs": {}},
-  {"id": "task2", "name": "Task 2", "schemas": {"method": "executor2"}, "inputs": {}}
+  {"id": "task1", "name": "Get CPU Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
+  {"id": "task2", "name": "Get Memory Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "memory"}}
 ]'
 
 # CLI output:
@@ -766,7 +766,7 @@ aipartnerupflow tasks cancel <task_id>
 
 ```bash
 # Use CLI for quick testing
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
+aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Use API server for integration testing
 aipartnerupflow serve start --reload
