@@ -39,6 +39,7 @@ class TestDockerExecutor:
         mock_client.containers.create.assert_called_once()
         mock_container.start.assert_called_once()
     
+    @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
     @pytest.mark.asyncio
     async def test_execute_missing_image(self):
         """Test error when image is missing"""
@@ -48,7 +49,8 @@ class TestDockerExecutor:
             await executor.execute({
                 "command": "ls"
             })
-    
+
+    @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
     @pytest.mark.asyncio
     async def test_execute_missing_command(self):
         """Test error when command is missing"""

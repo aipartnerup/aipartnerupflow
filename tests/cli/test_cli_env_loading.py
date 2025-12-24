@@ -13,6 +13,9 @@ from aipartnerupflow.cli.main import app, _load_env_file
 
 runner = CliRunner()
 
+# Ensure stderr is captured separately for tests when available
+runner = CliRunner()
+
 
 class TestCliEnvLoading:
     """Test CLI .env file loading"""

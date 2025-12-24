@@ -474,7 +474,7 @@ class TestTasksCopyCommand:
         
         assert result.exit_code == 1
         # Error message can be in stdout or stderr
-        output = result.stdout + result.stderr
+        output = result.output
         assert "not found" in output.lower() or "error" in output.lower() or "Task" in output
 
     @pytest.mark.asyncio
@@ -811,7 +811,7 @@ class TestTasksGetCommand:
         ])
         
         assert result.exit_code == 1
-        output = result.stdout + result.stderr
+        output = result.output
         assert "not found" in output.lower() or "error" in output.lower()
 
 
@@ -1158,7 +1158,7 @@ class TestTasksCreateCommand:
         ])
         
         assert result.exit_code == 1
-        output = result.stdout + result.stderr
+        output = result.output
         assert "file" in output.lower() or "stdin" in output.lower()
 
 
@@ -1256,7 +1256,7 @@ class TestTasksUpdateCommand:
         ])
         
         assert result.exit_code == 1
-        output = result.stdout + result.stderr
+        output = result.output
         assert "field" in output.lower() or "specified" in output.lower()
     
     @pytest.mark.asyncio
@@ -1268,7 +1268,7 @@ class TestTasksUpdateCommand:
         ])
         
         assert result.exit_code == 1
-        output = result.stdout + result.stderr
+        output = result.output
         assert "not found" in output.lower()
 
 
@@ -1388,7 +1388,7 @@ class TestTasksDeleteCommand:
         
         # Should fail because task is not pending
         assert result.exit_code == 1
-        output = result.stdout + result.stderr
+        output = result.output
         assert "cannot delete" in output.lower() or "pending" in output.lower()
         
         # Verify task was NOT deleted
@@ -1404,7 +1404,7 @@ class TestTasksDeleteCommand:
         ])
         
         assert result.exit_code == 1
-        output = result.stdout + result.stderr
+        output = result.output
         assert "not found" in output.lower()
 
 
@@ -1499,7 +1499,7 @@ class TestTasksTreeCommand:
         ])
         
         assert result.exit_code == 1
-        output = result.stdout + result.stderr
+        output = result.output
         assert "not found" in output.lower()
 
 
@@ -1607,7 +1607,7 @@ class TestTasksChildrenCommand:
         ])
         
         assert result.exit_code == 1
-        output = result.stdout + result.stderr
+        output = result.output
         assert "parent-id" in output.lower() or "task-id" in output.lower()
     
     @pytest.mark.asyncio
@@ -1619,7 +1619,7 @@ class TestTasksChildrenCommand:
         ])
         
         assert result.exit_code == 1
-        output = result.stdout + result.stderr
+        output = result.output
         assert "not found" in output.lower()
 
 
@@ -1840,11 +1840,11 @@ class TestTasksWatchCommand:
         # Command should fail with exit code 1
         assert result.exit_code == 1
         # Error message is printed to stderr
-        error_output = (result.stdout + result.stderr).lower()
+        error_output = result.output.lower()
         assert "task-id" in error_output or "all" in error_output or "error" in error_output or "must be specified" in error_output
     
     @pytest.mark.asyncio
-    async def test_tasks_watch_with_task_id_no_task(self, use_test_db_session):
+    def test_tasks_watch_with_task_id_no_task(self, use_test_db_session):
         """Test watching a non-existent task (should handle gracefully)"""
         # Mock the Live display to avoid interactive blocking
         from unittest.mock import patch, MagicMock
@@ -1885,6 +1885,6 @@ class TestTasksWatchCommand:
         # Command should exit gracefully when no tasks are running
         assert result.exit_code == 0
         # Should show message about no running tasks
-        output = (result.stdout + result.stderr).lower()
+        output = result.output.lower()
         assert "no running tasks" in output or "watching 0 task" in output
 

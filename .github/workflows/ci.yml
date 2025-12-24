@@ -1,0 +1,52 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    # container:
+    #   image: python:${{ matrix.python-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pin CI to a single, consistent Python version to reduce version-related
+        # test flakiness. Use 3.12 for CI stability; expand matrix later if desired.
+        python-version: ["3.12"]
+
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: pip
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install [dev,cli,a2a] to run tests without heavy optional deps (crewai, docker, grpc, ssh).
+        # This includes pytest and core CLI/API dependencies for comprehensive test coverage.
+        # If a constraints.txt file is present, use it to pin critical dependency versions.
+        if [ -f constraints.txt ]; then
+          pip install -e ".[dev,cli,a2a]" -c constraints.txt
+        else
+          pip install -e ".[dev,cli,a2a]"
+        fi
+
+    - name: Run tests
+      run: |
+        pytest
+
+    - name: Run ignored custom task model tests
+      run: |
+        pytest tests/core/storage/sqlalchemy/test_custom_task_model.py

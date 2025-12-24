@@ -2523,6 +2523,12 @@ def test_jsonrpc_tasks_generate(json_rpc_client):
     if not os.getenv("OPENAI_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"):
         pytest.skip("No LLM API key available for generate test")
     
+    # Skip if crewai is not installed (generate uses crewai executor)
+    try:
+        import crewai  # noqa: F401
+    except ImportError:
+        pytest.skip("crewai not installed - generate endpoint requires crewai[tools]")
+    
     generate_request = {
         "jsonrpc": "2.0",
         "id": 900,

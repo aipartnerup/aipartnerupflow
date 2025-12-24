@@ -37,6 +37,7 @@ class TestGrpcExecutor:
             assert result["service"] == "Greeter"
             assert result["method"] == "SayHello"
     
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
     @pytest.mark.asyncio
     async def test_execute_missing_server(self):
         """Test error when server is missing"""
@@ -49,6 +50,7 @@ class TestGrpcExecutor:
                 "request": {}
             })
     
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
     @pytest.mark.asyncio
     async def test_execute_missing_service(self):
         """Test error when service is missing"""
@@ -61,6 +63,7 @@ class TestGrpcExecutor:
                 "request": {}
             })
     
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
     @pytest.mark.asyncio
     async def test_execute_missing_method(self):
         """Test error when method is missing"""

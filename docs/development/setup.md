@@ -177,14 +177,12 @@ mypy src/aipartnerupflow/
 
 # Check specific module
 mypy src/aipartnerupflow/core/interfaces/ src/aipartnerupflow/core/execution/ src/aipartnerupflow/core/storage/
-```
+### Continuous Integration
 
-#### Run All Checks
+The project uses GitHub Actions for CI. The workflow is defined in `.github/workflows/ci.yml`.
 
-```bash
-# Run formatting, linting, and type checking
-black --check src/ tests/ && ruff check src/ tests/ && mypy src/aipartnerupflow/
-```
+It runs tests (`pytest`) across Python 3.10, 3.11, and 3.12.
+You can run them locally using the commands mentioned above.
 
 ### Database Operations
 

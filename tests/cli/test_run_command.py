@@ -261,7 +261,7 @@ class TestRunCommand:
         
         assert result.exit_code == 1
         # Error message may be in stdout or stderr
-        output = result.stdout + result.stderr
+        output = result.output
         assert "Error" in output or "must be provided" in output or result.exception is not None
     
     def test_run_flow_invalid_tasks_json(self):
@@ -273,6 +273,6 @@ class TestRunCommand:
         
         assert result.exit_code == 1
         # Should have error about invalid JSON
-        output = result.stdout + result.stderr
+        output = result.output
         assert "Error" in output or "JSON" in output or result.exception is not None
 
