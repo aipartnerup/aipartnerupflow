@@ -5,12 +5,32 @@ LLM Executor using LiteLLM
 import os
 import json
 from typing import Dict, Any, Optional, List, Union
-import litellm
 from aipartnerupflow.core.base import BaseTask
-from aipartnerupflow.core.extensions.decorators import executor_register
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Try to import litellm, mark availability for tests and runtime checks
+try:
+    import litellm
+    LITELLM_AVAILABLE = True
+except ImportError:
+    litellm = None  # type: ignore
+    LITELLM_AVAILABLE = False
+    logger.warning(
+        "litellm is not installed. LLM executor will not be available. "
+        "Install it with: pip install aipartnerupflow[llm]"
+    )
+
+# Only register if litellm is available (prevents registration failure when dependency is missing)
+if LITELLM_AVAILABLE:
+    from aipartnerupflow.core.extensions.decorators import executor_register
+else:
+    # No-op decorator when litellm is not available
+    def executor_register(*args, **kwargs):
+        def decorator(cls):
+            return cls
+        return decorator
 
 
 @executor_register()

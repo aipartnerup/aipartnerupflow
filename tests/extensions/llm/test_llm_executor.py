@@ -4,14 +4,7 @@ import os
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
-# Try to import litellm, if failing, mock it so we can run unit tests without it
-try:
-    import litellm
-except ImportError:
-    if "litellm" not in sys.modules:
-        sys.modules["litellm"] = MagicMock()
-
-from aipartnerupflow.extensions.llm.llm_executor import LLMExecutor
+from aipartnerupflow.extensions.llm.llm_executor import LLMExecutor, LITELLM_AVAILABLE
 from aipartnerupflow.core.extensions import get_registry
 
 @pytest.fixture
@@ -99,6 +92,7 @@ async def test_llm_executor_streaming_metadata(mock_litellm_module):
     _, kwargs = mock_litellm_module.acompletion.call_args
     assert kwargs["stream"] is True
 
+@pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
 @pytest.mark.asyncio
 async def test_llm_executor_registration():
     """Test standard registration"""
