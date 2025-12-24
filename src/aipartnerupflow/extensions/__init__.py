@@ -51,5 +51,13 @@ except ImportError:
     # Core extensions may not be available, that's okay
     pass
 
+
+# Auto-import llm extension to trigger registration
+try:
+    from aipartnerupflow.extensions.llm import llm_executor  # noqa: F401
+except ImportError:
+    # LLM extension may not be available (missing litellm), that's okay
+    pass
+
 __all__ = []
 
