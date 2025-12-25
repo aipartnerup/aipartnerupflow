@@ -51,7 +51,7 @@ aipartnerupflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 # Query task status (no API server needed)
 aipartnerupflow tasks status task-123
 
-# List running tasks (no API server needed)
+# List tasks from database (not just running)
 aipartnerupflow tasks list
 ```
 
@@ -71,7 +71,7 @@ aipartnerupflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 # 2. Check status (in another terminal or after execution)
 aipartnerupflow tasks status <task_id>
 
-# 3. List all running tasks
+# 3. List tasks (not just running)
 aipartnerupflow tasks list
 
 # 4. Cancel a task if needed
@@ -288,17 +288,23 @@ aipartnerupflow run flow <executor_id> --inputs '{"key": "value"}' --user-id my-
 
 ### Query Tasks
 
-#### List Running Tasks
+#### List Tasks
 
 ```bash
-# List all running tasks
+# List all tasks from database (defaults to root tasks)
 aipartnerupflow tasks list
 
 # List with user filter
 aipartnerupflow tasks list --user-id my-user
 
-# Limit number of results
-aipartnerupflow tasks list --limit 50
+# Filter by status
+aipartnerupflow tasks list --status completed
+
+# Show all tasks including children
+aipartnerupflow tasks list --all-tasks
+
+# Limit number of results and pagination
+aipartnerupflow tasks list --limit 50 --offset 0
 ```
 
 #### Get Task Details
@@ -315,37 +321,23 @@ aipartnerupflow tasks get task-123
 aipartnerupflow tasks status task-123 task-456
 ```
 
-#### Count Running Tasks
+#### Count Tasks
 
 ```bash
-# Count running tasks
+# Get task statistics by status from database (default)
 aipartnerupflow tasks count
 
 # Count with user filter
 aipartnerupflow tasks count --user-id my-user
+
+# Count only root tasks
+aipartnerupflow tasks count --root-only
+
+# JSON format output
+aipartnerupflow tasks count --format json
 ```
 
-#### List All Tasks (from Database)
 
-```bash
-# List all tasks from database (not just running)
-aipartnerupflow tasks all
-
-# Filter by status
-aipartnerupflow tasks all --status completed
-
-# Filter by user ID
-aipartnerupflow tasks all --user-id my-user
-
-# Only show root tasks (default: True)
-aipartnerupflow tasks all --root-only
-
-# Show all tasks including children
-aipartnerupflow tasks all --all-tasks
-
-# Limit and pagination
-aipartnerupflow tasks all --limit 50 --offset 0
-```
 
 #### Get Task Tree
 
@@ -741,8 +733,8 @@ aipartnerupflow run flow --tasks '[
 **A: Use TaskTracker (in-memory) + Database:**
 
 ```bash
-# Check if task is in memory (fast, but only for running tasks)
-aipartnerupflow tasks list  # Shows running tasks from TaskTracker
+# Check task status from database
+aipartnerupflow tasks list  # Shows tasks from database
 
 # Check full status from database (includes completed/failed tasks)
 aipartnerupflow tasks status task-123  # Shows full details from DB
@@ -860,4 +852,22 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM apflow_tasks;"
 - ✅ **Production ready** - Can be used in scripts and automation
 
 Use CLI for local development and automation, use API server for production deployment and remote access.
+
+## CLI Extension (Dynamic Plugins)
+
+The `apflow` CLI supports dynamic discovery of subcommands through Python's `entry_points` mechanism. This allows external projects to add their own command groups directly to the main CLI without modifying the core library.
+
+### Unified Entry Point
+
+Users always use the same consistent entry point:
+- `aipartnerupflow <your-plugin-name> <command>`
+- `apflow <your-plugin-name> <command>`
+
+### Example: Users Extension
+If a plugin registers a command group called `users`, a user can simply run:
+```bash
+apflow users stat
+```
+
+For more details on how to develop these extensions, see the [Extending Guide](../development/extending.md#creating-cli-extensions).
 

@@ -20,6 +20,13 @@ src_path = os.path.join(project_root, "src")
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed
+
 # Auto-discover built-in extensions for tests
 # This ensures extensions are registered before tests run
 # Must be imported before other modules that use the registry
@@ -40,6 +47,11 @@ except ImportError:
 
 try:
     from aipartnerupflow.extensions.generate import GenerateExecutor  # noqa: F401
+except ImportError:
+    pass  # Extension not available, tests will handle this
+
+try:
+    from aipartnerupflow.extensions.llm import LLMExecutor  # noqa: F401
 except ImportError:
     pass  # Extension not available, tests will handle this
 
@@ -533,6 +545,12 @@ def ensure_executors_registered():
     try:
         from aipartnerupflow.extensions.generate import GenerateExecutor
         ensure_registered(GenerateExecutor, "generate_executor")
+    except ImportError:
+        pass
+    
+    try:
+        from aipartnerupflow.extensions.llm import LLMExecutor
+        ensure_registered(LLMExecutor, "llm_executor")
     except ImportError:
         pass
     

@@ -48,92 +48,7 @@ def run_async_safe(coro: Coroutine[Any, Any, Any]) -> Any:
         return asyncio.run(coro)
 
 
-@app.command()
-def list(
-    user_id: Optional[str] = typer.Option(None, "--user-id", "-u", help="Filter by user ID"),
-    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of tasks to return"),
-):
-    """
-    List currently running tasks
-    
-    Args:
-        user_id: Optional user ID filter
-        limit: Maximum number of tasks to return
-    """
-    try:
-        task_executor = TaskExecutor()
-        running_task_ids = task_executor.get_all_running_tasks()
-        
-        if not running_task_ids:
-            typer.echo("No running tasks found")
-            return
-        
-        typer.echo(f"Found {len(running_task_ids)} running task(s):")
-        typer.echo("")
-        
-        # Get task details from database
-        from aipartnerupflow.core.storage import get_default_session
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from aipartnerupflow.core.config import get_task_model_class
-        
-        db_session = get_default_session()
-        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
-        
-        tasks_info = []
-        import asyncio
-        
-        # Helper function to get task (handles both sync and async)
-        async def get_task_safe(task_id: str):
-            try:
-                return await task_repository.get_task_by_id(task_id)
-            except Exception as e:
-                logger.warning(f"Failed to get task {task_id}: {str(e)}")
-                return None
-        
-        for task_id in running_task_ids[:limit]:
-            try:
-                # TaskRepository.get_task_by_id is async, but works with sync sessions too
-                task = run_async_safe(get_task_safe(task_id))
-                if task:
-                    # Apply user_id filter if specified
-                    if user_id and task.user_id != user_id:
-                        continue
-                    
-                    # Use task.to_dict() to match API format
-                    task_dict = task.to_dict()
-                    tasks_info.append(task_dict)
-                else:
-                    # Task not found in database
-                    tasks_info.append({
-                        "id": task_id,
-                        "task_id": task_id,  # Keep for backward compatibility
-                        "name": "Unknown",
-                        "status": "unknown",
-                        "progress": 0.0,
-                        "user_id": None,
-                        "created_at": None,
-                    })
-            except Exception as e:
-                logger.warning(f"Failed to get task {task_id}: {str(e)}")
-                tasks_info.append({
-                    "id": task_id,
-                    "task_id": task_id,  # Keep for backward compatibility
-                    "name": "Unknown",
-                    "status": "unknown",
-                    "progress": 0.0,
-                    "user_id": None,
-                    "created_at": None,
-                })
-        
-        # Display tasks
-        if tasks_info:
-            typer.echo(json.dumps(tasks_info, indent=2))
-        else:
-            typer.echo("No tasks found matching the criteria")
-            
-    except Exception as e:
-        typer.echo(f"Error: {str(e)}", err=True)
-        raise typer.Exit(1)
+
 
 
 @app.command()
@@ -238,58 +153,117 @@ def status(
 @app.command()
 def count(
     user_id: Optional[str] = typer.Option(None, "--user-id", "-u", help="Filter by user ID"),
+    root_only: bool = typer.Option(False, "--root-only", "-r", help="Count only root tasks (task trees)"),
+    output_format: str = typer.Option("table", "--format", "-f", help="Output format: json or table"),
 ):
     """
-    Get count of currently running tasks
+    Get count of tasks from database, grouped by status
     
-    Args:
-        user_id: Optional user ID filter
+    Examples:
+        apflow tasks count              # All tasks by status
+        apflow tasks count --root-only  # Root tasks only (task trees)
+        apflow tasks count -f table     # Table format
+        apflow tasks count -u user_id   # Filter by user
     """
     try:
-        task_executor = TaskExecutor()
+        from aipartnerupflow.core.storage import get_default_session
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        from aipartnerupflow.core.types import TaskStatus
         
-        if user_id:
-            # Filter by user_id: get all running tasks and filter by user_id
-            running_task_ids = task_executor.get_all_running_tasks()
-            if not running_task_ids:
-                typer.echo(json.dumps({"count": 0, "user_id": user_id}))
-                return
-            
-            # Get database session to check user_id
-            from aipartnerupflow.core.storage import get_default_session
-            from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-            from aipartnerupflow.core.config import get_task_model_class
-            
+        # All possible statuses
+        all_statuses = [
+            TaskStatus.PENDING,
+            TaskStatus.IN_PROGRESS,
+            TaskStatus.COMPLETED,
+            TaskStatus.FAILED,
+            TaskStatus.CANCELLED,
+        ]
+        
+        # parent_id filter: "" means root tasks (parent_id is None), None means all tasks
+        parent_id_filter = "" if root_only else None
+        
+        async def get_counts():
+            # Create database session inside async context
             db_session = get_default_session()
             task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
             
-            count = 0
-            import asyncio
-            
-            # Helper function to get task (handles both sync and async)
-            async def get_task_safe(task_id: str):
-                try:
-                    return await task_repository.get_task_by_id(task_id)
-                except Exception:
-                    return None
-            
-            for task_id in running_task_ids:
-                try:
-                    task = run_async_safe(get_task_safe(task_id))
-                    if task and task.user_id == user_id:
-                        count += 1
-                except Exception:
-                    continue
-            
-            typer.echo(json.dumps({"count": count, "user_id": user_id}))
+            try:
+                counts = {}
+                total = 0
+                
+                # Count all statuses
+                for status in all_statuses:
+                    tasks = await task_repository.query_tasks(
+                        user_id=user_id,
+                        status=status,
+                        parent_id=parent_id_filter,
+                        limit=10000  # High limit for counting
+                    )
+                    counts[status] = len(tasks)
+                    total += len(tasks)
+                
+                return {"total": total, **counts}
+            finally:
+                # Ensure session is properly closed
+                from sqlalchemy.ext.asyncio import AsyncSession
+                if isinstance(db_session, AsyncSession):
+                    await db_session.close()
+                else:
+                    db_session.close()
+        
+        result = run_async_safe(get_counts())
+        
+        # Add metadata to result
+        if user_id:
+            result["user_id"] = user_id
+        if root_only:
+            result["root_only"] = True
+        
+        # Output based on format
+        if output_format == "table":
+            _print_count_table(result)
         else:
-            # No user_id filter, return total count from memory
-            count = task_executor.get_running_tasks_count()
-            typer.echo(json.dumps({"count": count}))
+            typer.echo(json.dumps(result, indent=2))
             
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)
         raise typer.Exit(1)
+
+
+def _print_count_table(counts: dict):
+    """Print counts as a formatted table"""
+    table = Table(title="Task Statistics")
+    table.add_column("Status", style="cyan", no_wrap=True)
+    table.add_column("Count", style="magenta", justify="right")
+    
+    # Status display order and styles
+    status_styles = {
+        "total": ("bold white", "Total"),
+        "pending": ("dim", "Pending"),
+        "in_progress": ("blue", "In Progress"),
+        "completed": ("green", "Completed"),
+        "failed": ("red", "Failed"),
+        "cancelled": ("yellow", "Cancelled"),
+    }
+    
+    # Add filter info rows
+    if "user_id" in counts:
+        table.add_row("[dim]User ID[/dim]", f"[dim]{counts['user_id']}[/dim]")
+    if counts.get("root_only"):
+        table.add_row("[dim]Filter[/dim]", "[dim]Root tasks only[/dim]")
+    if "user_id" in counts or counts.get("root_only"):
+        table.add_section()
+    
+    # Add status rows in order
+    for status, (style, label) in status_styles.items():
+        if status in counts:
+            table.add_row(f"[{style}]{label}[/{style}]", f"[{style}]{counts[status]}[/{style}]")
+    
+    console.print(table)
+
+
+
 
 
 @app.command()
@@ -870,8 +844,8 @@ def children(
         raise typer.Exit(1)
 
 
-@app.command()
-def all(
+@app.command("list")
+def list_tasks(
     user_id: Optional[str] = typer.Option(None, "--user-id", "-u", help="Filter by user ID"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status"),
     root_only: bool = typer.Option(True, "--root-only/--all-tasks", help="Only show root tasks (default: True)"),
@@ -879,7 +853,7 @@ def all(
     offset: int = typer.Option(0, "--offset", "-o", help="Pagination offset"),
 ):
     """
-    List all tasks from database, not just running ones (equivalent to tasks.list API)
+    List tasks from database
     
     Args:
         user_id: Filter by user ID

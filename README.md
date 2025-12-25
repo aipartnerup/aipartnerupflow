@@ -22,6 +22,7 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 - **aipartnerupflow API Executor**: Inter-instance API calls for distributed execution (task executor implementation)
 - **MCP Executor**: Model Context Protocol executor for accessing external tools and data sources (task executor implementation)
 - **MCP Server** [a2a]: MCP (Model Context Protocol) server exposing task orchestration as MCP tools and resources
+- **LLM Executor** [llm]: Direct LLM interaction via LiteLLM (supports OpenAI, Anthropic, Gemini, etc.)
 - **A2A Protocol Server** [a2a]: A2A Protocol Server (A2A Protocol is the standard protocol for agent communication)
 - **CLI Tools** [cli]: Command-line interface
 
@@ -47,6 +48,7 @@ All task executors implement the `ExecutableTask` interface:
 - **ApFlowApiExecutor**: Inter-instance API calls for distributed execution (built-in executor)
 - **McpExecutor**: Model Context Protocol executor for accessing external tools and data sources (built-in executor)
 - **GenerateExecutor**: Generate task tree JSON arrays from natural language requirements using LLM (built-in executor)
+- **LLMExecutor** [llm]: Direct LLM interaction via LiteLLM (supports 100+ providers)
 - **BatchManager** [crewai]: Batch orchestration container (batches multiple crews)
 
 ### Supporting Features
@@ -103,6 +105,9 @@ pip install aipartnerupflow[docker]
 
 # gRPC executor (gRPC service calls)
 pip install aipartnerupflow[grpc]
+
+# LLM support (LiteLLM, supports 100+ providers)
+pip install aipartnerupflow[llm]
 
 # Everything (includes all extras)
 pip install aipartnerupflow[all]

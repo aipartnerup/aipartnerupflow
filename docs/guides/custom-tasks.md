@@ -1334,6 +1334,45 @@ pip install aipartnerupflow[a2a]  # For HTTP transport
 - Integrate with MCP-compatible services
 - Local and remote MCP server communication
 
+### LLM Executor (`llm_executor`)
+
+Direct LLM interaction via LiteLLM, supporting over 100+ providers including OpenAI, Anthropic, Google Gemini, and many others.
+
+**Installation:**
+```bash
+pip install aipartnerupflow[llm]
+```
+
+**Features:**
+- **Unified Model Access**: Use a single interface to interact with any LLM provider.
+- **Streaming Support**: Built-in support for real-time streaming results (SSE).
+- **Auto-Config**: Automatically handles API keys from environment variables or project-level configuration.
+- **LiteLLM Power**: Leverages LiteLLM for robust, production-ready LLM interactions.
+
+**Usage:**
+```python
+# Create task using LLM executor
+task = await task_manager.task_repository.create_task(
+    name="llm_executor",
+    user_id="user123",
+    inputs={
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "user", "content": "Explain quantum entanglement in one sentence."}
+        ]
+    }
+)
+```
+
+**Input Schema:**
+- `model`: (required) Model name (provider-prefixed if needed, e.g., `gpt-4o`, `claude-3-5-sonnet-20240620`)
+- `messages`: (required) Array of message objects (role and content)
+- `stream`: (optional) Enable streaming (default: false)
+- `temperature`: (optional) Controls randomness (default: 1.0)
+- `max_tokens`: (optional) Maximum generation length
+- `api_base`: (optional) Custom API base URL
+- `api_key`: (optional) Override API key (can be passed via `X-LLM-API-KEY` header in API)
+
 ### Task Tree Generator Executor
 
 Generate valid task tree JSON arrays from natural language requirements using LLM.

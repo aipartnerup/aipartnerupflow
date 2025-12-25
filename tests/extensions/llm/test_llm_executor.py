@@ -104,17 +104,30 @@ async def test_llm_executor_registration():
 @pytest.mark.asyncio
 async def test_llm_executor_real_api_call():
     """Test real API call if keys are present (Integration Test)"""
+    # Force reload environment variables from .env to ensure real keys are available
+    # and not overridden by previous tests' mock keys if they leaked
     try:
         from dotenv import load_dotenv
-        load_dotenv()
+        # Use override=True to ensure we get the real values from .env
+        load_dotenv(override=True)
     except ImportError:
         pass
         
     openai_key = os.environ.get("OPENAI_API_KEY")
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     
+    # Check for obvious mock keys to prevent accidental real API calls with fake keys
+    mock_keys = ["test-key", "mock-", "test-key-123"]
+    if openai_key and any(m in openai_key for m in mock_keys):
+        logger.warning(f"Detected potential mock key in OPENAI_API_KEY: {openai_key}. Ignoring for real API test.")
+        openai_key = None
+    if anthropic_key and any(m in anthropic_key for m in mock_keys):
+        logger.warning(f"Detected potential mock key in ANTHROPIC_API_KEY: {anthropic_key}. Ignoring for real API test.")
+        anthropic_key = None
+    
     if not openai_key and not anthropic_key:
-        pytest.skip("No API key found in environment (OPENAI_API_KEY or ANTHROPIC_API_KEY)")
+        pytest.skip("No real API key found in environment (OPENAI_API_KEY or ANTHROPIC_API_KEY). "
+                    "Skipping integration test to avoid using mock keys.")
     
     executor = LLMExecutor()
     
@@ -122,27 +135,30 @@ async def test_llm_executor_real_api_call():
     if openai_key:
         # Use gpt-4o for cheap testing
         model = "gpt-4o" 
+        active_key_suffix = f"...{openai_key[-4:]}" if len(openai_key) > 8 else "****"
     else:
         # Use claude-sonnet-4-5 for cheap testing
         model = "claude-sonnet-4-5"
+        active_key_suffix = f"...{anthropic_key[-4:]}" if len(anthropic_key) > 8 else "****"
         
     inputs = {
         "model": model,
         "messages": [{"role": "user", "content": "Say exactly 'TEST_SUCCESS'"}],
-        # Do not mock stream here, standard call
     }
     
-    print(f"\nDEBUG: Running real API call with model {model}")
+    print(f"\nDEBUG: Running real API call with model {model} (key: {active_key_suffix})")
     try:
         result = await executor.execute(inputs)
     except Exception as e:
         pytest.fail(f"Real API call execution exception: {str(e)}")
     
     if not result["success"]:
-        pytest.fail(f"Real API call failed result: {result.get('error')}")
+        # If it failed due to authentication, we want to know which key was used
+        error_msg = result.get('error', 'Unknown error')
+        pytest.fail(f"Real API call failed with error: {error_msg}. (Model: {model})")
         
     assert result["success"] is True
-    # Check if content contains TEST_SUCCESS (LLM might add punctuation)
+    # Check if content contains TEST_SUCCESS
     content = result.get("content", "")
     assert "TEST_SUCCESS" in content or "TEST_SUCCESS" in content.upper()
     assert result["is_stream"] is False

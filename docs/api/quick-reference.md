@@ -167,6 +167,22 @@ task = await task_manager.task_repository.create_task(
 )
 ```
 
+### LLM Executor (`llm_executor`)
+
+```python
+# Create task using LLM executor
+task = await task_manager.task_repository.create_task(
+    name="llm_executor",
+    user_id="user123",
+    inputs={
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "content": "Explain AI."}],
+        "temperature": 0.7,
+        "max_tokens": 1000
+    }
+)
+```
+
 ## Task Orchestration
 
 ### Build Task Tree
@@ -521,17 +537,14 @@ root_task_id = result.get("root_task_id")  # Present if save=true
 **CLI Usage Examples:**
 
 ```bash
-# Basic parallel workflow
-apflow generate task-tree "Fetch data from two different APIs in parallel, then merge the results and save to database"
+# Get task statistics by status from database
+apflow tasks count
 
-# ETL pipeline
-apflow generate task-tree "Extract data from REST API, transform it by filtering and aggregating, then load it into database"
+# List tasks from database (defaults to root tasks)
+apflow tasks list --user-id user123
 
-# With custom LLM parameters
-apflow generate task-tree "Create a workflow" --temperature 0.9 --max-tokens 6000
-
-# Save to database
-apflow generate task-tree "My requirement" --save --user-id user123
+# Generate and preview task tree
+apflow generate task-tree "Fetch data from API and process it"
 ```
 
 # Complex processing flow
@@ -657,8 +670,11 @@ aipartnerupflow serve start --host 0.0.0.0 --port 8000
 ### Task Management
 
 ```bash
-# List tasks
+# List tasks from database
 aipartnerupflow tasks list --user-id user123
+
+# Get task statistics
+aipartnerupflow tasks count
 
 # Get task status
 aipartnerupflow tasks status task_123

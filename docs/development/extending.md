@@ -10,6 +10,7 @@ aipartnerupflow is designed to be extensible. You can create:
 2. **Custom Extensions**: Storage, hooks, and other extension types
 3. **Custom Tools**: Reusable tools for executors
 4. **Custom Hooks**: Pre/post execution hooks
+5. **CLI Extensions**: Additional subcommands for the `apflow` CLI
 
 ## Creating a Custom Executor
 
@@ -309,6 +310,57 @@ class CancellableExecutor(ExecutableTask):
             "status": "cancelled",
             "message": "Cancellation requested"
         }
+
+## Creating CLI Extensions
+
+CLI extensions allow you to register new subcommand groups to the `apflow` CLI using Python's `entry_points` mechanism.
+
+### 1. Create your Command Group
+
+Inherit from `CLIExtension` to ensure consistent UI defaults (like showing help when no arguments are provided).
+
+```python
+from aipartnerupflow.cli import CLIExtension
+
+# Create the command group
+users_app = CLIExtension(help="Manage and analyze users")
+
+@users_app.command()
+def stat():
+    """Display user statistics"""
+    print("User Statistics: ...")
+
+@users_app.command()
+def list():
+    """List all users"""
+    print("User list...")
+```
+
+### 2. Register in `pyproject.toml`
+
+Register your command group under the `aipartnerupflow.cli_plugins` group in your project's `pyproject.toml`.
+
+```toml
+[project.entry-points."aipartnerupflow.cli_plugins"]
+users = "your_package.cli:users_app"
+```
+
+- The entry point **key** (`users`) will be the name of the subcommand cluster.
+- The **value** points to the `CLIExtension` (or `typer.Typer`) instance.
+
+### 3. Usage
+
+After installing your package in the same environment as `aipartnerupflow`, the command will be available automatically:
+
+```bash
+apflow users stat
+```
+
+### Supported Plugin Types
+
+Discovery supports two types of plugin objects:
+1. **`typer.Typer` (or `CLIExtension`)**: Registered as a **subcommand group** (e.g., `apflow users <cmd>`).
+2. **`Callable` (function)**: Registered as a **single command** (e.g., `apflow run-once`).
 ```
 
 ## Advanced: Streaming Support

@@ -21,10 +21,12 @@ runner = CliRunner()
 
 
 @pytest.fixture
-def mock_llm_api_key():
+def mock_llm_api_key(monkeypatch):
     """Mock LLM API key for testing"""
-    with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key-123"}):
-        yield
+    # Use monkeypatch for better environment isolation in pytest
+    monkeypatch.setenv("OPENAI_API_KEY", "mock-test-key-cli")
+    # Also ensure ANTHROPIC is NOT set to avoid confusion
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
 
 @pytest.fixture
@@ -66,48 +68,29 @@ class TestGenerateCommand:
         assert ("max-tokens" in result.stdout or "max_tokens" in result.stdout or 
                 "temperature" in result.stdout or "provider" in result.stdout)
     
-    def test_generate_missing_api_key(self, use_test_db_session):
+    def test_generate_missing_api_key(self, monkeypatch, use_test_db_session):
         """Test generate command fails when API key is missing"""
-        # Clear config to ensure we use default TaskModel (no custom fields like project_id)
+        # Clear config to ensure we use default TaskModel
         clear_config()
         
-        # Clear environment variables
-        env_backup = dict(os.environ)
-        try:
-            # Remove API keys from environment
-            os.environ.pop("OPENAI_API_KEY", None)
-            os.environ.pop("ANTHROPIC_API_KEY", None)
-            
-            # Mock get_default_session to use test database session
-            # This ensures we use a clean database with correct schema
-            # Also mock os.getenv to prevent .env file from loading API keys
-            # (generate.py loads .env at module level, which would restore API keys)
-            with patch('aipartnerupflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-                # Mock os.getenv to return None for API keys even if .env file was loaded
-                # This simulates the scenario where .env file doesn't contain API keys
-                original_getenv = os.getenv
-                def mock_getenv(key, default=None):
-                    # If checking for API keys, return None (simulate missing API keys)
-                    if key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
-                        return None
-                    # Otherwise, use real os.getenv
-                    return original_getenv(key, default)
-                
-                with patch('aipartnerupflow.cli.commands.generate.os.getenv', side_effect=mock_getenv):
-                    result = runner.invoke(app, [
-                        "generate", "task-tree",
-                        "Test requirement"
-                    ])
-                    assert result.exit_code == 1
-                    # Error message can be in stdout or stderr
-                    output = result.output
-                    assert "No LLM API key found" in output or "Warning" in output or "LLM API key" in output
-        finally:
-            # Restore environment
-            os.environ.clear()
-            os.environ.update(env_backup)
-            # Clear config again to ensure clean state
-            clear_config()
+        # Use monkeypatch to safely remove API keys from environment
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        
+        # Also mock the specific module's getenv and os.environ.get to be sure
+        # because the module might have already loaded them or use a cached version
+        with patch('aipartnerupflow.cli.commands.generate.os.getenv', return_value=None):
+            with patch('os.environ.get', return_value=None):
+                result = runner.invoke(app, [
+                    "generate", "task-tree",
+                    "Test requirement"
+                ])
+                assert result.exit_code == 1
+                output = result.output
+                assert "No LLM API key found" in output or "Warning" in output or "LLM API key" in output
+        
+        # Clear config again to ensure clean state
+        clear_config()
     
     @pytest.mark.asyncio
     async def test_generate_basic(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):

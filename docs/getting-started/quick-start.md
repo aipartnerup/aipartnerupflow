@@ -20,7 +20,7 @@ This installs the core orchestration framework with no optional dependencies.
 
 **What you get:**
 - Task orchestration engine (TaskManager)
-- Built-in executors (system_info_executor, command_executor)
+- Built-in executors (system_info_executor, command_executor, llm_executor)
 - Storage (DuckDB - no setup needed!)
 
 ### Full Installation (All Features)
@@ -204,6 +204,12 @@ The API uses the A2A Protocol (JSON-RPC 2.0 format):
 - Execute via CLI, query via API
 - Execute via API, query via CLI
 - Mix and match as needed!
+
+### Task Statistics
+You can quickly get an overview of all tasks in the database:
+```bash
+apflow tasks count
+```
 
 ## Step 3: Understanding Task Execution
 

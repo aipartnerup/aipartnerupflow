@@ -50,49 +50,67 @@ class TestTasksListCommand:
     """Test cases for tasks list command"""
     
     @pytest.mark.asyncio
-    async def test_tasks_list_no_running_tasks(self, use_test_db_session):
-        """Test listing tasks when no tasks are running"""
+    async def test_tasks_list_empty_db(self, use_test_db_session):
+        """Test listing tasks when database is empty"""
         result = runner.invoke(app, ["tasks", "list"])
         
         assert result.exit_code == 0
-        assert "No running tasks found" in result.stdout or "[]" in result.stdout
+        output = result.stdout
+        tasks = json.loads(output)
+        assert isinstance(tasks, list)
+        assert len(tasks) == 0
     
     @pytest.mark.asyncio
-    async def test_tasks_list_with_running_tasks(self, use_test_db_session, sample_task):
-        """Test listing running tasks"""
+    async def test_tasks_list_with_tasks(self, use_test_db_session):
+        """Test listing tasks from database"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create a task
+        task_id = f"list-test-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=task_id,
+            name="List Test Task",
+            user_id="test_user",
+            priority=1,
+            has_children=False,
+        )
+        
         result = runner.invoke(app, ["tasks", "list"])
         
         assert result.exit_code == 0
-        # Should contain task information in full task.to_dict() format
         output = result.stdout
-        # Extract JSON from output (may contain extra messages)
-        import re
-        json_match = re.search(r'\[.*\]', output, re.DOTALL)
-        if json_match:
-            tasks_data = json.loads(json_match.group())
-        else:
-            # Fallback: try parsing entire output
-            tasks_data = json.loads(output)
-        assert isinstance(tasks_data, list)
-        assert len(tasks_data) > 0
-        # Verify full task dict structure (matching API format)
-        task_dict = tasks_data[0]
+        tasks = json.loads(output)
+        assert isinstance(tasks, list)
+        assert len(tasks) >= 1
+        # Verify task structure
+        task_dict = tasks[0]
         assert "id" in task_dict
         assert "name" in task_dict
         assert "status" in task_dict
-        assert "progress" in task_dict
-        assert "user_id" in task_dict
-        assert "created_at" in task_dict
     
     @pytest.mark.asyncio
-    async def test_tasks_list_with_user_filter(self, use_test_db_session, sample_task):
+    async def test_tasks_list_with_user_filter(self, use_test_db_session):
         """Test listing tasks with user_id filter"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        await task_repository.create_task(
+            id=f"list-user1-{uuid.uuid4()}",
+            name="User 1 Task",
+            user_id="user_1",
+            priority=1,
+            has_children=False,
+        )
+        
         result = runner.invoke(app, [
             "tasks", "list",
-            "--user-id", "test_user"
+            "--user-id", "user_1"
         ])
         
         assert result.exit_code == 0
+        output = result.stdout
+        tasks = json.loads(output)
+        for task in tasks:
+            assert task["user_id"] == "user_1"
 
 
 class TestTasksStatusCommand:
@@ -182,40 +200,150 @@ class TestTasksCountCommand:
     """Test cases for tasks count command"""
     
     @pytest.mark.asyncio
-    async def test_tasks_count_no_running_tasks(self, use_test_db_session):
-        """Test counting tasks when no tasks are running"""
-        result = runner.invoke(app, ["tasks", "count"])
-        
-        assert result.exit_code == 0
-        output = result.stdout
-        assert "count" in output
-        # Parse JSON output
-        count_data = json.loads(output)
-        assert count_data["count"] == 0
-    
-    @pytest.mark.asyncio
-    async def test_tasks_count_with_running_tasks(self, use_test_db_session, sample_task):
-        """Test counting running tasks"""
-        result = runner.invoke(app, ["tasks", "count"])
+    async def test_tasks_count_empty_db(self, use_test_db_session):
+        """Test counting tasks when database is empty"""
+        result = runner.invoke(app, ["tasks", "count", "--format", "json"])
         
         assert result.exit_code == 0
         output = result.stdout
         count_data = json.loads(output)
-        assert count_data["count"] >= 1
+        
+        # Should have total and all status counts
+        assert "total" in count_data
+        assert count_data["total"] == 0
+        assert "pending" in count_data
+        assert "in_progress" in count_data
+        assert "completed" in count_data
+        assert "failed" in count_data
+        assert "cancelled" in count_data
     
     @pytest.mark.asyncio
-    async def test_tasks_count_with_user_filter(self, use_test_db_session, sample_task):
+    async def test_tasks_count_with_tasks(self, use_test_db_session):
+        """Test counting tasks with various statuses"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create tasks with different statuses
+        statuses = ["pending", "in_progress", "completed", "failed", "cancelled"]
+        for i, status in enumerate(statuses):
+            task_id = f"count-{status}-{uuid.uuid4()}"
+            await task_repository.create_task(
+                id=task_id,
+                name=f"Count Test {status}",
+                user_id="test_user",
+                priority=1,
+                has_children=False,
+            )
+            # Update status (create_task defaults to pending)
+            if status != "pending":
+                await task_repository.update_task_status(task_id, status)
+        
+        result = runner.invoke(app, ["tasks", "count", "--format", "json"])
+        
+        assert result.exit_code == 0
+        output = result.stdout
+        count_data = json.loads(output)
+        
+        # Each status should have at least 1 task
+        assert count_data["total"] >= 5
+        assert count_data["pending"] >= 1
+        assert count_data["in_progress"] >= 1
+        assert count_data["completed"] >= 1
+        assert count_data["failed"] >= 1
+        assert count_data["cancelled"] >= 1
+    
+    @pytest.mark.asyncio
+    async def test_tasks_count_with_user_filter(self, use_test_db_session):
         """Test counting tasks with user_id filter"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create tasks for different users
+        await task_repository.create_task(
+            id=f"count-user1-{uuid.uuid4()}",
+            name="User 1 Task",
+            user_id="user_1",
+            priority=1,
+            has_children=False,
+        )
+        await task_repository.create_task(
+            id=f"count-user2-{uuid.uuid4()}",
+            name="User 2 Task",
+            user_id="user_2",
+            priority=1,
+            has_children=False,
+        )
+        
         result = runner.invoke(app, [
             "tasks", "count",
-            "--user-id", "test_user"
+            "--user-id", "user_1",
+            "--format", "json"
         ])
         
         assert result.exit_code == 0
         output = result.stdout
         count_data = json.loads(output)
-        assert "count" in count_data
-        assert count_data.get("user_id") == "test_user"
+        
+        assert count_data.get("user_id") == "user_1"
+        assert count_data["pending"] >= 1
+    
+    @pytest.mark.asyncio
+    async def test_tasks_count_table_format(self, use_test_db_session):
+        """Test count with table output format"""
+        result = runner.invoke(app, [
+            "tasks", "count",
+            "--format", "table"
+        ])
+        
+        assert result.exit_code == 0
+        output = result.stdout
+        
+        # Should contain table elements
+        assert "Task Statistics" in output
+        assert "Status" in output
+        assert "Count" in output
+    
+    @pytest.mark.asyncio
+    async def test_tasks_count_root_only(self, use_test_db_session):
+        """Test count with --root-only flag"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create a root task
+        root_id = f"count-root-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=root_id,
+            name="Root Task",
+            user_id="test_user",
+            priority=1,
+            has_children=True,
+        )
+        
+        # Create child tasks under the root
+        for i in range(3):
+            child_id = f"count-child-{i}-{uuid.uuid4()}"
+            await task_repository.create_task(
+                id=child_id,
+                name=f"Child Task {i}",
+                user_id="test_user",
+                parent_id=root_id,
+                priority=1,
+                has_children=False,
+            )
+        
+        # Count all tasks (should include children)
+        result_all = runner.invoke(app, ["tasks", "count", "--format", "json"])
+        assert result_all.exit_code == 0
+        count_all = json.loads(result_all.stdout)
+        
+        # Count root only (should exclude children)
+        result_root = runner.invoke(app, ["tasks", "count", "--root-only", "--format", "json"])
+        assert result_root.exit_code == 0
+        count_root = json.loads(result_root.stdout)
+        
+        # Root count should be less than total count
+        assert count_root["total"] < count_all["total"]
+        assert count_root.get("root_only") is True
+        # At least 1 root task
+        assert count_root["pending"] >= 1
+
 
 
 class TestTasksCancelCommand:
@@ -1647,7 +1775,7 @@ class TestTasksAllCommand:
             task_ids.append(task_id)
         
         result = runner.invoke(app, [
-            "tasks", "all"
+            "tasks", "list"
         ])
         
         assert result.exit_code == 0
@@ -1695,7 +1823,7 @@ class TestTasksAllCommand:
         )
         
         result = runner.invoke(app, [
-            "tasks", "all",
+            "tasks", "list",
             "--status", "completed",
             "--root-only"  # Explicitly set root_only to True (default)
         ])
@@ -1739,7 +1867,7 @@ class TestTasksAllCommand:
         )
         
         result = runner.invoke(app, [
-            "tasks", "all",
+            "tasks", "list",
             "--user-id", "user1"
         ])
         
@@ -1773,7 +1901,7 @@ class TestTasksAllCommand:
             )
         
         result = runner.invoke(app, [
-            "tasks", "all",
+            "tasks", "list",
             "--limit", "2"
         ])
         
@@ -1812,7 +1940,7 @@ class TestTasksAllCommand:
         )
         
         result = runner.invoke(app, [
-            "tasks", "all",
+            "tasks", "list",
             "--root-only"
         ])
         
