@@ -2,7 +2,6 @@
 Test executor-specific pre/post hooks functionality
 """
 import pytest
-from unittest.mock import Mock, AsyncMock
 from aipartnerupflow import (
     executor_register,
     clear_config,
@@ -10,7 +9,6 @@ from aipartnerupflow import (
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.registry import add_executor_hook
 from aipartnerupflow.core.extensions import get_registry
-from aipartnerupflow.core.extensions.types import ExtensionCategory
 
 
 class TestExecutorHooks:

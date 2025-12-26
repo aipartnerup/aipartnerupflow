@@ -2,10 +2,7 @@
 Test TaskManager functionality
 """
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import Mock, AsyncMock, patch
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
+from unittest.mock import AsyncMock, patch
 
 from aipartnerupflow.core.execution.task_manager import TaskManager
 from aipartnerupflow.core.types import TaskTreeNode

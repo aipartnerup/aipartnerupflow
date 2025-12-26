@@ -6,7 +6,7 @@ ContextVar, allowing automatic session handling across nested function calls.
 """
 
 from contextvars import ContextVar
-from typing import Optional, Union, Callable, Any
+from typing import Optional, Union, Callable
 from functools import wraps
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
@@ -116,7 +116,7 @@ async def with_db_session_context(
                     session.rollback()
                 raise
         
-    except Exception as e:
+    except Exception:
         # Rollback on error
         if session and auto_commit:
             try:

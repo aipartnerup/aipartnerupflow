@@ -524,7 +524,6 @@ class ApFlowApiExecutor(BaseTask):
     
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo API call result"""
-        import json
         method = inputs.get("method", "tasks.get")
         params = inputs.get("params", {})
         

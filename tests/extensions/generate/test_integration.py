@@ -12,7 +12,6 @@ from aipartnerupflow.extensions.generate import GenerateExecutor
 async def test_generate_executor_registration():
     """Test that GenerateExecutor is properly registered"""
     # Import to trigger registration
-    from aipartnerupflow.extensions.generate import GenerateExecutor
     
     executor = GenerateExecutor()
     assert executor.id == "generate_executor"
@@ -36,7 +35,6 @@ async def test_generate_executor_with_task_manager(sync_db_session):
     task_manager = TaskManager(sync_db_session)
     
     # Import to register executor
-    from aipartnerupflow.extensions.generate import GenerateExecutor
     
     # Create task using generate_executor
     task = await task_manager.task_repository.create_task(

@@ -15,7 +15,7 @@ from aipartnerupflow import (
     task_model_register,
     clear_config,
 )
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel, Base
+from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 
 
 
@@ -406,11 +406,8 @@ class TestCustomTaskModelWithAgentExecutor:
         context = self._create_request_context(tasks, metadata={"require_existing_tasks": True})
         
         # Execute with real database and custom model
-        # Mock get_default_session in both agent_executor and task_executor modules
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent, \
-             patch('aipartnerupflow.core.execution.task_executor.get_default_session') as mock_get_session_executor:
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent:
             mock_get_session_agent.return_value = sync_db_session
-            mock_get_session_executor.return_value = sync_db_session
             
             # Execute using executor with custom config
             result = await executor.execute(context, mock_event_queue)
@@ -477,7 +474,7 @@ class TestCustomTaskModelWithAgentExecutor:
             from aipartnerupflow.core.utils.logger import get_logger
             logger = get_logger(__name__)
             
-            logger.info(f"==Custom TaskModel Test Results==")
+            logger.info("==Custom TaskModel Test Results==")
             logger.info(f"Pre-hook calls: {json.dumps(pre_hook_calls, indent=2)}")
             logger.info(f"Post-hook calls: {json.dumps(post_hook_calls, indent=2)}")
             logger.info(f"Task project_id: {task_after.project_id}")

@@ -5,10 +5,8 @@ Tests the API documentation endpoints for Swagger UI and OpenAPI schema.
 """
 
 import pytest
-import json
 from starlette.testclient import TestClient
 from aipartnerupflow.api.a2a.server import create_a2a_server
-from tests.conftest import sync_db_session
 
 
 @pytest.fixture(scope="function")

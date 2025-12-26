@@ -2,13 +2,11 @@
 Test task tree lifecycle hooks functionality
 """
 import pytest
-from unittest.mock import Mock, AsyncMock
 from aipartnerupflow import (
     register_task_tree_hook,
     get_task_tree_hooks,
     clear_config,
 )
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.types import TaskTreeNode
 
 

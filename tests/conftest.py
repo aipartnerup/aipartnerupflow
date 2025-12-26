@@ -6,9 +6,8 @@ import pytest_asyncio
 import sys
 import os
 import tempfile
-from pathlib import Path
 from unittest.mock import Mock, AsyncMock, patch
-from typing import AsyncGenerator, Generator, Optional
+from typing import Optional
 
 # Add project root to Python path for development
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -56,9 +55,9 @@ except ImportError:
     pass  # Extension not available, tests will handle this
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from aipartnerupflow.core.storage.sqlalchemy.models import Base, TaskModel, TASK_TABLE_NAME
+from aipartnerupflow.core.storage.sqlalchemy.models import Base, TASK_TABLE_NAME
 from aipartnerupflow.core.storage.factory import (
     create_session,
     get_default_session,

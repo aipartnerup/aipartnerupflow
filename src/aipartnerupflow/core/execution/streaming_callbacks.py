@@ -128,7 +128,7 @@ class StreamingCallbacks:
                     # Direct event queue
                     logger.warning("Direct event queue handling not yet implemented")
             
-            logger.info(f'📡 [StreamingCallbacks] Update sent successfully')
+            logger.info('📡 [StreamingCallbacks] Update sent successfully')
         except Exception as e:
             logger.error(f"Failed to send progress update: {str(e)}")
 

@@ -238,7 +238,7 @@ def resolve_tool(tool_ref: Any) -> Any:
                     logger.debug(f"resolve_tool: Calling '{func_name}' from crewai_tools with args={args}, kwargs={kwargs}")
                     return func(*args, **kwargs)
             except ImportError:
-                logger.debug(f"resolve_tool: Method 2 (crewai_tools) - crewai_tools not available")
+                logger.debug("resolve_tool: Method 2 (crewai_tools) - crewai_tools not available")
                 pass
             
             # Method 3: Try to get from current module globals

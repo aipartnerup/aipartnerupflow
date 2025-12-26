@@ -5,9 +5,6 @@ This replaces test_task_model.py as it's more appropriate to test the repository
 layer that provides actual functionality, rather than just the model layer.
 """
 import pytest
-from datetime import datetime, timezone
-from sqlalchemy import Column, String
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 

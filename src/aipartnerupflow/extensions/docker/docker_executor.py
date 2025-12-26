@@ -6,7 +6,7 @@ with custom images, environment variables, and volume mounts.
 """
 
 import asyncio
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import executor_register
 from aipartnerupflow.core.execution.errors import ValidationError, ConfigurationError

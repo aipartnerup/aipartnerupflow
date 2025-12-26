@@ -5,7 +5,7 @@ Provides PostgreSQL database backend as an ExtensionCategory.STORAGE extension.
 Optional - requires [postgres] extra installation.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from aipartnerupflow.core.extensions.storage import StorageBackend
 from aipartnerupflow.core.extensions.decorators import storage_register
 

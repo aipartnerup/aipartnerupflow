@@ -6,7 +6,7 @@ Tests for WebSocket communication functionality.
 
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from aipartnerupflow.extensions.websocket.websocket_executor import WebSocketExecutor, WEBSOCKETS_AVAILABLE
 
 

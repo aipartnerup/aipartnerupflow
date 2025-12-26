@@ -13,7 +13,6 @@ from aipartnerupflow.core.utils.helpers import tree_node_to_dict
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
-from rich.layout import Layout
 
 logger = get_logger(__name__)
 
@@ -73,7 +72,6 @@ def status(
         task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
         
         statuses = []
-        import asyncio
         
         # Helper function to get task (handles both sync and async)
         async def get_task_safe(task_id: str):
@@ -285,7 +283,6 @@ def cancel(
     try:
         task_executor = TaskExecutor()
         
-        import asyncio
         
         results = []
         for task_id in task_ids:
@@ -944,7 +941,6 @@ def watch(
         db_session = get_default_session()
         task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
         
-        import asyncio
         
         # Helper function to get task
         async def get_task_safe(task_id: str):

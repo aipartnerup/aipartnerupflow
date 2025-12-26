@@ -16,7 +16,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse
 
 from aipartnerupflow.api.routes.base import BaseRouteHandler
-from aipartnerupflow.core.storage import get_default_session, create_pooled_session
+from aipartnerupflow.core.storage import create_pooled_session
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.execution.task_creator import TaskCreator
 from aipartnerupflow.core.utils.logger import get_logger

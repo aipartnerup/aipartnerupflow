@@ -1,12 +1,11 @@
 """
 Limited Website Scraping Tool
 """
-from typing import Dict, Any, Type, List, Optional
+from typing import Dict, Type, List, Optional
 from aipartnerupflow.core.tools import BaseTool, tool_register
 from pydantic import BaseModel, Field
 import requests
 from bs4 import BeautifulSoup
-import re
 
 from aipartnerupflow.core.utils.logger import get_logger
 

@@ -12,10 +12,9 @@ Type-specific decorators:
 """
 
 from typing import Callable, Optional, Dict, Any, Type, TYPE_CHECKING
-from functools import wraps
 from aipartnerupflow.core.extensions import get_registry
 from aipartnerupflow.core.extensions.base import Extension
-from aipartnerupflow.core.extensions.protocol import ExecutorFactory, ExecutorLike
+from aipartnerupflow.core.extensions.protocol import ExecutorFactory
 from aipartnerupflow.core.utils.logger import get_logger
 
 if TYPE_CHECKING:

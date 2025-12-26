@@ -10,15 +10,10 @@ This test uses the official A2A SDK client which handles protocol details automa
 
 import pytest
 import pytest_asyncio
-import asyncio
-import httpx
 import uuid
-from typing import Optional
 from a2a.client import ClientFactory, ClientConfig
 from a2a.types import Message, DataPart, Role, AgentCard
 from aipartnerupflow.api.a2a.server import create_a2a_server
-from aipartnerupflow.core.storage import get_default_session, set_default_session, reset_default_session
-from tests.conftest import sync_db_session
 import json
 
 

@@ -1,5 +1,4 @@
 
-import sys
 import os
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -96,7 +95,6 @@ async def test_llm_executor_streaming_metadata(mock_litellm_module):
 @pytest.mark.asyncio
 async def test_llm_executor_registration():
     """Test standard registration"""
-    import aipartnerupflow.extensions.llm.llm_executor
     registry = get_registry()
     assert registry.is_registered("llm_executor")
     assert isinstance(registry.create_executor_instance("llm_executor"), LLMExecutor)

@@ -6,7 +6,7 @@ Tests for Docker container execution functionality.
 
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from aipartnerupflow.extensions.docker.docker_executor import DockerExecutor, DOCKER_AVAILABLE
 
 

@@ -8,11 +8,10 @@ import pytest
 import pytest_asyncio
 import json
 import uuid
-import asyncio
 from typer.testing import CliRunner
 from aipartnerupflow.cli.main import app
 from aipartnerupflow.core.execution.task_executor import TaskExecutor
-from aipartnerupflow.core.storage import get_default_session, set_default_session, reset_default_session
+from aipartnerupflow.core.storage import set_default_session, reset_default_session
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.config import get_task_model_class
 
@@ -501,7 +500,6 @@ class TestTasksCopyCommand:
     @pytest.mark.asyncio
     async def test_tasks_copy_basic(self, use_test_db_session):
         """Test copying a basic task"""
-        from aipartnerupflow.core.execution.task_creator import TaskCreator
         
         task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
         

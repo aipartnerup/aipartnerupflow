@@ -5,7 +5,7 @@ Tests for MCP server main entry point.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from aipartnerupflow.api.mcp.server import McpServer
 
 

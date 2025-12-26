@@ -161,7 +161,7 @@ async def validate_dependency_references(
         
         if not dep_id:
             raise ValueError(
-                f"Dependency must have 'id' field or be a string task ID"
+                "Dependency must have 'id' field or be a string task ID"
             )
         
         if dep_id not in task_ids_in_tree:

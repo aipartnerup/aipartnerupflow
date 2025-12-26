@@ -20,7 +20,6 @@ from datetime import datetime, timedelta, timezone
 from aipartnerupflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
 from aipartnerupflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
 from aipartnerupflow.api.routes.tasks import TaskRoutes
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.config import get_task_model_class
 from aipartnerupflow.core.utils.logger import get_logger
 
@@ -304,7 +303,7 @@ def generate_token(payload: Dict[str, Any], secret_key: str, algorithm: str = "H
         return token
     except JWTError as e:
         raise ValueError(f"Error generating JWT token: {e}")
-    except Exception as e:
+    except Exception:
         raise
 
 def create_a2a_server(

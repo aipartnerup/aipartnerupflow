@@ -8,14 +8,12 @@ request, ensuring proper isolation and concurrent operation support.
 from typing import Optional, Union
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aipartnerupflow.core.storage.context import (
     set_request_session,
     clear_request_session,
-    get_request_session,
 )
 from aipartnerupflow.core.storage.factory import (
     create_session,

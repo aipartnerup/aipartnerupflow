@@ -10,7 +10,7 @@ from sqlalchemy import select
 from aipartnerupflow.core.execution.task_manager import TaskManager
 from aipartnerupflow.core.execution.task_tracker import TaskTracker
 from aipartnerupflow.core.types import TaskTreeNode
-from aipartnerupflow.core.storage import get_default_session, create_pooled_session
+from aipartnerupflow.core.storage import create_pooled_session
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.config import (
     get_task_model_class,

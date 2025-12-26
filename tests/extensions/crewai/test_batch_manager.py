@@ -31,7 +31,6 @@ class TestBatchManagerRegistration:
     def test_executor_register_decorator(self):
         """Test that BatchManager is registered via @executor_register() decorator"""
         # Import BatchManager to trigger registration
-        from aipartnerupflow.extensions.crewai.batch_manager import BatchManager
         
         # Verify extension was registered
         registry = get_registry()

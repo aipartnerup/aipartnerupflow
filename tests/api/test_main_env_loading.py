@@ -8,10 +8,9 @@ Tests the critical functionality for library usage:
 """
 import os
 import sys
-import tempfile
 import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 # Import functions - these are private but we need to test them
 # Use importlib to ensure we get the module, not a function
 import importlib

@@ -6,10 +6,8 @@ dependency task results in a real execution environment.
 """
 
 import pytest
-import pytest_asyncio
 import json
 from aipartnerupflow.core.execution.task_executor import TaskExecutor
-from aipartnerupflow.core.storage import get_default_session, set_default_session, reset_default_session
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.config import get_task_model_class
 
@@ -171,7 +169,7 @@ class TestAggregateResultsIntegration:
         assert disk_task.status == "completed"
         assert disk_task.result is not None
         
-        print(f"\n✅ Successfully aggregated system resources:")
+        print("\n✅ Successfully aggregated system resources:")
         print(f"   Root task: {root_task_id}")
         print(f"   Aggregated {aggregated_result['result_count']} dependency results")
         print(f"   Results keys: {list(results.keys())}")
@@ -300,8 +298,8 @@ class TestAggregateResultsIntegration:
         assert isinstance(disk_data, dict)
         assert "total" in disk_data or "available" in disk_data or "system" in disk_data
         
-        print(f"\n✅ Successfully aggregated mixed resources:")
-        print(f"   Root task: aggregate-mixed-resources")
+        print("\n✅ Successfully aggregated mixed resources:")
+        print("   Root task: aggregate-mixed-resources")
         print(f"   Aggregated {aggregated_result['result_count']} dependency results")
         print(f"   Results keys: {list(results.keys())}")
         print(f"   CPU data keys: {list(cpu_data.keys())}")

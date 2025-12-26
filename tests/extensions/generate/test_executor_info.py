@@ -2,7 +2,6 @@
 Test executor_info module
 """
 
-import pytest
 from aipartnerupflow.extensions.generate.executor_info import (
     get_available_executors,
     get_executor_schema,

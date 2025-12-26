@@ -293,7 +293,7 @@ def flow(
                         root_task_ids.append(task.get("id"))
                         break
             
-            typer.echo(f"Task(s) started in background")
+            typer.echo("Task(s) started in background")
             if len(root_task_ids) == 1:
                 typer.echo(f"Task ID: {root_task_ids[0]}")
                 typer.echo(f"Monitor with: aipartnerupflow tasks status {root_task_ids[0]}")
@@ -301,7 +301,7 @@ def flow(
             else:
                 typer.echo(f"Task IDs: {', '.join(root_task_ids)}")
                 typer.echo(f"Monitor with: aipartnerupflow tasks status {' '.join(root_task_ids)}")
-                typer.echo(f"Watch with: aipartnerupflow tasks watch --all")
+                typer.echo("Watch with: aipartnerupflow tasks watch --all")
             
             if watch:
                 # Start watch mode
@@ -378,7 +378,7 @@ def flow(
                                     break
                             
                             if all_finished:
-                                typer.echo(f"\nAll tasks finished")
+                                typer.echo("\nAll tasks finished")
                                 break
                 except KeyboardInterrupt:
                     typer.echo("\nStopped watching (tasks continue in background)")

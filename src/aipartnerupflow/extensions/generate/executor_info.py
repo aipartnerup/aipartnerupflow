@@ -7,7 +7,6 @@ for use in LLM context when generating task trees.
 
 from typing import Dict, Any, List, Optional
 from aipartnerupflow.core.extensions.registry import get_registry
-from aipartnerupflow.core.extensions.types import ExtensionCategory
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)

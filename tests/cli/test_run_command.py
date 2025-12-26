@@ -11,8 +11,6 @@ import tempfile
 from pathlib import Path
 from typer.testing import CliRunner
 from aipartnerupflow.cli.main import app
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
-from aipartnerupflow.core.storage import get_default_session, set_default_session, reset_default_session
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.config import get_task_model_class
 

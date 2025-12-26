@@ -5,7 +5,7 @@ Task management service for orchestrating and executing tasks
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List, Union, Callable, Awaitable
+from typing import Dict, Any, Optional, List, Union
 import asyncio
 from decimal import Decimal
 from inspect import iscoroutinefunction
@@ -17,7 +17,6 @@ from aipartnerupflow.core.types import (
     TaskTreeNode,
     TaskPreHook,
     TaskPostHook,
-    TaskStatus,
 )
 from aipartnerupflow.core.config import get_pre_hooks, get_post_hooks, get_task_model_class, get_task_tree_hooks
 from aipartnerupflow.core.execution.dependency_resolver import (
@@ -686,7 +685,7 @@ class TaskManager:
             # Use saved task_id_for_error_handling to avoid accessing task.id after potential session rollback
             refresh_task_id = task_id_for_error_handling if task_id_for_error_handling else (task.id if task else None)
             if not refresh_task_id:
-                raise ValueError(f"Task ID not available for refresh")
+                raise ValueError("Task ID not available for refresh")
             task = await self.task_repository.get_task_by_id(refresh_task_id)
             if not task:
                 raise ValueError(f"Task {refresh_task_id} not found")
@@ -1200,7 +1199,7 @@ class TaskManager:
             if not task_type:
                 # If no type specified and method is not an executor id, use default
                 task_type = "stdio"
-                logger.debug(f"No type specified, defaulting to 'stdio'")
+                logger.debug("No type specified, defaulting to 'stdio'")
             extension = registry.get_by_type(ExtensionCategory.EXECUTOR, task_type)
             if extension:
                 extension_id = extension.id

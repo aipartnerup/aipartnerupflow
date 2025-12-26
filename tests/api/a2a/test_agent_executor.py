@@ -712,10 +712,8 @@ class TestAgentExecutor:
         context = self._create_request_context(tasks)
         
         # Execute in simple mode with real database
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent, \
-             patch('aipartnerupflow.core.execution.task_executor.get_default_session') as mock_get_session_executor:
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent:
             mock_get_session_agent.return_value = sync_db_session
-            mock_get_session_executor.return_value = sync_db_session
             
             # Execute using executor
             result = await executor.execute(context, mock_event_queue)
@@ -778,7 +776,7 @@ class TestAgentExecutor:
             assert len(pre_hook_calls) == 4  # root + 3 children
             assert len(post_hook_calls) >= 4
             
-            logger.info(f"✅ Executor-based aggregation test passed")
+            logger.info("✅ Executor-based aggregation test passed")
     
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -927,11 +925,8 @@ class TestAgentExecutor:
         context = self._create_request_context(tasks)
         
         # Execute in simple mode with real database
-        # Mock get_default_session in both agent_executor and task_executor modules
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent, \
-             patch('aipartnerupflow.core.execution.task_executor.get_default_session') as mock_get_session_executor:
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent:
             mock_get_session_agent.return_value = sync_db_session
-            mock_get_session_executor.return_value = sync_db_session
             
             # Execute using executor with hooks
             result = await executor.execute(context, mock_event_queue)

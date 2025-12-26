@@ -4,7 +4,7 @@ Pre-execution hook extension wrapper
 Wraps existing ConfigRegistry hooks as ExtensionCategory.HOOK extensions.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from aipartnerupflow.core.extensions.hook import HookExtension
 from aipartnerupflow.core.extensions.decorators import hook_register
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel

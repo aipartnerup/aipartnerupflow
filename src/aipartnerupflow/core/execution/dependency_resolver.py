@@ -6,7 +6,7 @@ checking dependency satisfaction, and managing dependency-related operations.
 These functions can be used by TaskManager and other orchestration components.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.utils.logger import get_logger

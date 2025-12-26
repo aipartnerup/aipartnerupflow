@@ -7,7 +7,6 @@ Tests the daemon command as documented in README.md
 """
 
 import pytest
-import os
 from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 from aipartnerupflow.cli.main import app

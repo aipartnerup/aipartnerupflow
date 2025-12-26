@@ -979,7 +979,7 @@ class TaskCreator:
         if not dependent_tasks:
             # No dependents: use original_task subtree directly
             minimal_tree = original_subtree
-            logger.info(f"No dependents found, using original_task subtree directly")
+            logger.info("No dependents found, using original_task subtree directly")
         else:
             # Has dependents: find minimal subtree that includes original_task + all dependents
             # All dependents should be in the same root tree (children=True only supports same root tree)
@@ -988,7 +988,7 @@ class TaskCreator:
             
             if not minimal_tree:
                 # Fallback: use original_subtree
-                logger.warning(f"Could not build minimal subtree with dependents, falling back to original_task subtree")
+                logger.warning("Could not build minimal subtree with dependents, falling back to original_task subtree")
                 minimal_tree = original_subtree
         
         root_original_task_id = minimal_tree.task.id

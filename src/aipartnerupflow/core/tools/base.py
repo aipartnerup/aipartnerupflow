@@ -6,7 +6,7 @@ Tools can be used independently or with CrewAI agents.
 """
 
 from typing import Type, Optional, Any
-from abc import ABC, abstractmethod
+from abc import ABC
 
 # Try to use CrewAI's BaseTool if available, otherwise use our own implementation
 try:

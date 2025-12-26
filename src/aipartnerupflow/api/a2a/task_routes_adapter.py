@@ -9,9 +9,8 @@ to work through the A2A "/" endpoint.
 from typing import Dict, Any, Optional, List, Union, TYPE_CHECKING
 from starlette.requests import Request
 from a2a.server.agent_execution import RequestContext
-from a2a.server.events import EventQueue
 from a2a.types import Task, TaskStatus, TaskState, DataPart, Artifact, Part
-from a2a.utils import new_agent_text_message, new_agent_parts_message
+from a2a.utils import new_agent_text_message
 from aipartnerupflow.api.routes.tasks import TaskRoutes
 from aipartnerupflow.core.utils.logger import get_logger
 

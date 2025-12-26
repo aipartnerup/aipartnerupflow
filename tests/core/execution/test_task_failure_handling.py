@@ -11,9 +11,7 @@ Verifies that:
 import pytest
 from aipartnerupflow.core.execution.task_manager import TaskManager
 from aipartnerupflow.core.execution.errors import BusinessError, ValidationError, ConfigurationError
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.base import BaseTask
-from aipartnerupflow.core.extensions.decorators import executor_register
 from aipartnerupflow.core.extensions import get_registry
 from typing import Dict, Any
 

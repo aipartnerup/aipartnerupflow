@@ -2,7 +2,6 @@
 Test crew_tool decorator functionality
 """
 import pytest
-from unittest.mock import patch, MagicMock
 
 try:
     from aipartnerupflow.core.tools import tool_register, get_tool_registry, register_tool, BaseTool

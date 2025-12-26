@@ -3,12 +3,9 @@ Test demo mode functionality (use_demo parameter)
 """
 import pytest
 from typing import Dict, Any, Optional
-from unittest.mock import Mock, AsyncMock
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.execution.task_manager import TaskManager
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.types import TaskTreeNode
 from aipartnerupflow import executor_register, clear_config
 from aipartnerupflow.core.extensions import get_registry
 

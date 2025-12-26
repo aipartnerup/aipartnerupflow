@@ -42,7 +42,7 @@ def _check_protocol_dependency(protocol: str):
             err=True,
         )
         raise typer.Exit(1)
-    except ImportError as e:
+    except ImportError:
         # Dependencies not installed
         _, extra_name, description = get_protocol_dependency_info(protocol)
         typer.echo(

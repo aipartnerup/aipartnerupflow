@@ -2,19 +2,15 @@
 Custom Starlette Application that supports system-level methods and optional JWT authentication
 """
 import os
-import uuid
-import asyncio
 from starlette.routing import Route
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
-from datetime import datetime, timezone
-from typing import Optional, Callable, Type, Dict, Any, List
+from typing import Optional, Callable, Type, List
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
-    DEFAULT_RPC_URL,
     EXTENDED_AGENT_CARD_PATH,
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )

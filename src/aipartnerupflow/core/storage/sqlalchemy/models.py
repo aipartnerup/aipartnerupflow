@@ -2,11 +2,9 @@
 SQLAlchemy models for task storage
 """
 
-from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey, Text, Boolean, Numeric
+from sqlalchemy import Column, String, Integer, DateTime, JSON, Text, Boolean, Numeric
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
 from sqlalchemy.orm import declarative_base
-from datetime import datetime
 from typing import Dict, Any
 import uuid
 import os

@@ -108,7 +108,7 @@ def start(
         env["AIPARTNERUPFLOW_API_PROTOCOL"] = protocol
         
         if background:
-            typer.echo(f"Starting daemon service in background...")
+            typer.echo("Starting daemon service in background...")
             typer.echo(f"Log file: {log_file}")
             
             # Start process in background
@@ -136,9 +136,9 @@ def start(
                 remove_pid()
                 raise typer.Exit(1)
         else:
-            typer.echo(f"Starting daemon service in foreground...")
+            typer.echo("Starting daemon service in foreground...")
             typer.echo(f"API server will run on {host}:{port} (protocol: {protocol})")
-            typer.echo(f"Press Ctrl+C to stop")
+            typer.echo("Press Ctrl+C to stop")
             # Run in foreground
             subprocess.run(cmd, env=env)
             

@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Type
 from pydantic import BaseModel, HttpUrl
 from urllib.parse import urlparse, urlunparse, ParseResult
 
-import random
 
 # Use standard library logging directly
 logger = logging.getLogger(__name__)
@@ -308,7 +307,6 @@ def tree_node_to_dict(node) -> Dict[str, Any]:
         # Convert task tree to dict
         task_dict = tree_node_to_dict(task_tree_node)
     """
-    from aipartnerupflow.core.types import TaskTreeNode
     
     task_dict = node.task.to_dict()
     if node.children:

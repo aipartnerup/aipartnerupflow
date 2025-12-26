@@ -62,7 +62,7 @@ def tool_register(name: Optional[str] = None, override: bool = False):
         try:
             register_tool(tool_name, cls_or_func, override=override)
             logger.info(f"Auto-registered tool '{tool_name}' using @tool_register decorator")
-        except ValueError as e:
+        except ValueError:
             if not override:
                 logger.warning(f"Tool '{tool_name}' already registered. Use override=True to replace it.")
                 raise

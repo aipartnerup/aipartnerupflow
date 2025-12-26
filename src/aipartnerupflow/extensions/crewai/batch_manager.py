@@ -9,7 +9,7 @@ Simple implementation: Multiple crew tasks executed sequentially and merged.
 No complex workflow - just batch execution with atomic semantics.
 """
 
-from typing import Dict, Any, Optional, Type
+from typing import Dict, Any, Optional
 from aipartnerupflow.extensions.crewai.types import BatchState
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import executor_register

@@ -345,7 +345,6 @@ class TestSshExecutor:
         
         import tempfile
         import os
-        import stat
         
         # Create a temporary key file with wrong permissions
         with tempfile.NamedTemporaryFile(delete=False, mode='w') as f:

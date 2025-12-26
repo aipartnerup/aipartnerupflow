@@ -10,7 +10,7 @@ Uses Protocol-based design to avoid circular dependencies with ExecutableTask.
 from typing import Dict, List, Optional, Type, Callable, Any
 from aipartnerupflow.core.extensions.base import Extension
 from aipartnerupflow.core.extensions.types import ExtensionCategory
-from aipartnerupflow.core.extensions.protocol import ExecutorFactory, ExecutorLike
+from aipartnerupflow.core.extensions.protocol import ExecutorFactory
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)

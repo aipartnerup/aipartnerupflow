@@ -6,7 +6,7 @@ Tests for MCP HTTP transport implementation.
 
 import pytest
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from aipartnerupflow.api.mcp.transport_http import HttpTransport

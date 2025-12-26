@@ -8,7 +8,6 @@ Tests for the unified decorators system (Flask-style API):
 - executor_register
 """
 import pytest
-from unittest.mock import Mock, AsyncMock
 from aipartnerupflow import (
     register_pre_hook,
     register_post_hook,
@@ -18,8 +17,6 @@ from aipartnerupflow import (
     executor_register,
 )
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
-from aipartnerupflow.core.types import TaskPreHook, TaskPostHook
-from aipartnerupflow.core.extensions.base import Extension
 from aipartnerupflow.core.extensions.types import ExtensionCategory
 from aipartnerupflow.core.utils.logger import get_logger
 

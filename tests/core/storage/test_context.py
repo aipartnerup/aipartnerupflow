@@ -6,7 +6,6 @@ session management and prevent async event loop issues.
 """
 import pytest
 import asyncio
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +18,6 @@ from aipartnerupflow.core.storage.context import (
 )
 from aipartnerupflow.core.storage.factory import (
     get_default_session,
-    create_pooled_session,
     reset_default_session,
     reset_session_pool_manager,
 )
@@ -130,7 +128,6 @@ class TestWithDbSessionContext:
     async def test_with_db_session_context_auto_rollback_on_error(self, tmp_path):
         """Test with_db_session_context with auto_commit=True calls rollback on error"""
         import uuid
-        from unittest.mock import patch, AsyncMock
         db_path = tmp_path / "test-rollback.duckdb"
         connection_string = f"duckdb:///{db_path}"
         

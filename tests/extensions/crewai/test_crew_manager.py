@@ -27,7 +27,7 @@ Method 3 (globals) - Call Stack Global Variables (fallback):
 """
 import pytest
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 # Try to import CrewManager, skip tests if not available
 try:

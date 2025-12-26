@@ -4,11 +4,6 @@ Test CLI serve command functionality
 Tests the serve command as documented in README.md
 """
 
-import pytest
-import threading
-import time
-import signal
-import os
 from typer.testing import CliRunner
 from aipartnerupflow.cli.main import app
 

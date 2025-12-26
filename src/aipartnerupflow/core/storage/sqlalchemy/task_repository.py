@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, TypeVar
-from datetime import datetime, timezone
+from datetime import datetime
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.utils.logger import get_logger
 
@@ -133,7 +133,6 @@ class TaskRepository:
         # This can happen if Base.metadata was polluted by custom TaskModel tests
         # Note: We check __table__.columns instead of mapper.columns because __table__ references
         # Base.metadata.tables[TASK_TABLE_NAME], which gets polluted by extend_existing=True
-        from sqlalchemy.inspection import inspect as sa_inspect
         import importlib
         import sys
         from aipartnerupflow.core.storage.sqlalchemy.models import Base as ModelsBase, TASK_TABLE_NAME
@@ -310,9 +309,8 @@ class TaskRepository:
         try:
             # Check if task_model_class's __table__ or Base.metadata has custom columns
             # This can happen if Base.metadata was polluted by custom TaskModel tests
-            from sqlalchemy.inspection import inspect as sa_inspect
             from sqlalchemy.orm import configure_mappers
-            from sqlalchemy import select, text
+            from sqlalchemy import text
             from aipartnerupflow.core.storage.sqlalchemy.models import Base as ModelsBase, TASK_TABLE_NAME
             import importlib
             import sys
@@ -452,7 +450,7 @@ class TaskRepository:
                     final_table_columns = {c.name for c in final_task_model.__table__.columns}
                     if custom_columns & final_table_columns:
                         # Still polluted even after reload, use raw SQL as fallback
-                        logger.debug(f"TaskModel.__table__ still has custom columns after reload, using raw SQL fallback")
+                        logger.debug("TaskModel.__table__ still has custom columns after reload, using raw SQL fallback")
                         standard_columns = [
                             'id', 'parent_id', 'user_id', 'name', 'status', 'priority',
                             'dependencies', 'inputs', 'params', 'result', 'error', 'schemas',
@@ -1018,7 +1016,6 @@ class TaskRepository:
         so this method mainly ensures the hierarchy is properly saved.
         """
         # Import here to avoid circular dependency
-        from aipartnerupflow.core.types import TaskTreeNode
         
         try:
             # Save root task first

@@ -12,12 +12,11 @@ import pytest
 import pytest_asyncio
 import json
 import uuid
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from aipartnerupflow.api.routes.tasks import TaskRoutes
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.config import get_task_model_class
 from aipartnerupflow.core.execution.task_tracker import TaskTracker
@@ -156,7 +155,6 @@ class TestHandleTaskExecute:
         # Verify execution was called with streaming enabled for webhook
         # Note: execute_task_tree is called via asyncio.create_task, so we check the call
         # The actual call happens in background, but we can verify the context was created
-        from aipartnerupflow.api.routes.tasks import WebhookStreamingContext
 
         # The context is created before the async task, so we can't directly assert on it
         # But we can verify the response indicates webhook is configured
@@ -1278,8 +1276,6 @@ class TestHandleTaskGenerate:
             
             # Mock TaskExecutor.execute_task_tree to actually call generate_executor
             # This will test the full flow including _post_process_tasks
-            from aipartnerupflow.core.execution.task_executor import TaskExecutor
-            from aipartnerupflow.core.types import TaskTreeNode
             from aipartnerupflow.extensions.generate.generate_executor import GenerateExecutor
             
             async def mock_execute_task_tree(*args, **kwargs):

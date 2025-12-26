@@ -5,16 +5,13 @@ Tests the generate task-tree command, including the new temperature and max_toke
 """
 
 import pytest
-import pytest_asyncio
 import json
-import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, AsyncMock, Mock
 from typer.testing import CliRunner
 from aipartnerupflow.cli.main import app
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.config import get_task_model_class
 from aipartnerupflow import clear_config
 
 runner = CliRunner()

@@ -7,15 +7,11 @@ to ensure proper session management, limits, and cleanup.
 import pytest
 import asyncio
 import time
-import os
-from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aipartnerupflow.core.storage.factory import (
     SessionPoolManager,
-    TaskTreeSession,
     create_task_tree_session,
     get_session_pool_manager,
     reset_session_pool_manager,
@@ -388,8 +384,6 @@ class TestSessionPoolWithTaskExecutor:
         """Test that different task trees use isolated sessions"""
         import uuid
         from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from aipartnerupflow.core.execution.task_executor import TaskExecutor
-        from aipartnerupflow.core.types import TaskTreeNode
         
         db_path = tmp_path / "test.duckdb"
         connection_string = f"duckdb:///{db_path}"

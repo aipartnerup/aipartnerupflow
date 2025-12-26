@@ -382,7 +382,7 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         if not context.task_id or not context.context_id:
             raise ValueError("Task ID and Context ID are required for streaming mode")
         
-        logger.info(f"Starting streaming mode execution")
+        logger.info("Starting streaming mode execution")
         logger.info(f"Task ID: {context.task_id}, Context ID: {context.context_id}")
         
         try:

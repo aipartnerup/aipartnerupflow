@@ -12,7 +12,6 @@ This is an integration test that tests the full flow:
 
 import pytest
 import os
-from typing import Dict, Any
 
 # Try to import required modules
 try:

@@ -4,10 +4,6 @@ Test CLI .env file loading functionality
 Tests that CLI commands load .env file from appropriate location when executed.
 """
 import os
-import pytest
-import tempfile
-from pathlib import Path
-from unittest.mock import patch
 from typer.testing import CliRunner
 from aipartnerupflow.cli.main import app, _load_env_file
 

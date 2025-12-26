@@ -6,7 +6,7 @@ demo task definitions against executor schemas. Used by demo applications
 like aipartnerupflow-demo to generate accurate demo tasks.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from aipartnerupflow.core.extensions.registry import get_registry
 from aipartnerupflow.core.extensions.types import ExtensionCategory
 from aipartnerupflow.core.utils.logger import get_logger

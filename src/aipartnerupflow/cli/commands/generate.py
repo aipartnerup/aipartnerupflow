@@ -36,7 +36,6 @@ def run_async_safe(coro):
     try:
         loop = asyncio.get_running_loop()
         import concurrent.futures
-        import threading
         
         def run_in_thread():
             new_loop = asyncio.new_event_loop()
