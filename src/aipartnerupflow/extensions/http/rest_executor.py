@@ -9,6 +9,7 @@ import httpx
 from typing import Dict, Any, Optional
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import executor_register
+from aipartnerupflow.core.execution.errors import ValidationError
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -85,7 +86,7 @@ class RestExecutor(BaseTask):
         """
         url = inputs.get("url")
         if not url:
-            raise ValueError("url is required in inputs")
+            raise ValidationError(f"[{self.id}] url is required in inputs")
         
         method = inputs.get("method", "GET").upper()
         headers = inputs.get("headers", {})
@@ -141,79 +142,55 @@ class RestExecutor(BaseTask):
         
         logger.info(f"Executing HTTP {method} request to {url}")
         
-        try:
-            async with httpx.AsyncClient(verify=verify, timeout=timeout) as client:
-                # Check for cancellation before making request
-                if self.cancellation_checker and self.cancellation_checker():
-                    logger.info("Request cancelled before execution")
-                    return {
-                        "success": False,
-                        "error": "Request was cancelled",
-                        "url": url,
-                        "method": method
-                    }
-                
-                response = await client.request(**request_kwargs)
-                
-                # Check for cancellation after request
-                if self.cancellation_checker and self.cancellation_checker():
-                    logger.info("Request cancelled after execution")
-                    return {
-                        "success": False,
-                        "error": "Request was cancelled",
-                        "url": url,
-                        "method": method,
-                        "status_code": response.status_code
-                    }
-                
-                # Try to parse JSON response
-                json_response = None
-                try:
-                    json_response = response.json()
-                except Exception:
-                    pass
-                
-                result = {
-                    "url": str(response.url),
-                    "status_code": response.status_code,
-                    "headers": dict(response.headers),
-                    "body": response.text,
-                    "json": json_response,
-                    "success": 200 <= response.status_code < 300,
+        async with httpx.AsyncClient(verify=verify, timeout=timeout) as client:
+            # Check for cancellation before making request
+            if self.cancellation_checker and self.cancellation_checker():
+                logger.info("Request cancelled before execution")
+                return {
+                    "success": False,
+                    "error": "Request was cancelled",
+                    "url": url,
                     "method": method
                 }
-                
-                if not result["success"]:
-                    logger.warning(
-                        f"HTTP request returned non-success status {response.status_code}: {url}"
-                    )
-                
-                return result
-                
-        except httpx.TimeoutException as e:
-            logger.error(f"HTTP request timeout after {timeout} seconds: {url}")
-            return {
-                "success": False,
-                "error": f"Request timeout after {timeout} seconds",
-                "url": url,
+            
+            # Exceptions (e.g., httpx.TimeoutException, httpx.ConnectError)
+            # will propagate to TaskManager
+            response = await client.request(**request_kwargs)
+            
+            # Check for cancellation after request
+            if self.cancellation_checker and self.cancellation_checker():
+                logger.info("Request cancelled after execution")
+                return {
+                    "success": False,
+                    "error": "Request was cancelled",
+                    "url": url,
+                    "method": method,
+                    "status_code": response.status_code
+                }
+            
+            # Try to parse JSON response
+            json_response = None
+            try:
+                json_response = response.json()
+            except Exception:
+                pass
+            
+            result = {
+                "url": str(response.url),
+                "status_code": response.status_code,
+                "headers": dict(response.headers),
+                "body": response.text,
+                "json": json_response,
+                "success": 200 <= response.status_code < 300,
                 "method": method
             }
-        except httpx.RequestError as e:
-            logger.error(f"HTTP request error: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": f"Request error: {str(e)}",
-                "url": url,
-                "method": method
-            }
-        except Exception as e:
-            logger.error(f"Unexpected error executing HTTP request: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "url": url,
-                "method": method
-            }
+            
+            if not result["success"]:
+                logger.warning(
+                    f"HTTP request returned non-success status {response.status_code}: {url}"
+                )
+            
+            return result
     
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo HTTP response data"""

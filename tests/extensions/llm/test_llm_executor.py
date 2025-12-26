@@ -101,6 +101,7 @@ async def test_llm_executor_registration():
     assert registry.is_registered("llm_executor")
     assert isinstance(registry.create_executor_instance("llm_executor"), LLMExecutor)
 
+@pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
 @pytest.mark.asyncio
 async def test_llm_executor_real_api_call():
     """Test real API call if keys are present (Integration Test)"""

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Exception Handling Architecture**
+  - New exception hierarchy based on FastAPI/production framework best practices
+  - `ApflowError` base exception for all framework-specific errors
+  - `BusinessError` for expected user/configuration errors (logged without stack traces)
+    - `ValidationError` for input validation failures
+    - `ConfigurationError` for missing configuration/dependencies
+  - `SystemError` for unexpected system-level errors (logged with stack traces)
+    - `ExecutorError` for executor runtime failures
+    - `StorageError` for database/storage failures
+  - Created `core/execution/errors.py` with comprehensive exception documentation
+  - Created `docs/development/exception-handling-standards.md` with implementation guidelines
+
+### Changed
+- **Executor Error Handling Refactoring**
+  - All executors now raise exceptions instead of returning error dictionaries
+  - Technical exceptions (TimeoutError, ConnectionError, etc.) now propagate naturally to TaskManager
+  - Executors validate inputs and raise `ValidationError` or `ConfigurationError` for expected failures
+  - Updated executors: `DockerExecutor`, `GrpcExecutor`, `RestExecutor`, `SshExecutor`, `CommandExecutor`, `LLMExecutor`
+  - TaskManager now catches all exceptions, marks tasks as failed, and logs appropriately based on exception type
+  - `BusinessError` logged without stack trace (clean logs), other exceptions logged with full stack trace
+
+
 ## [0.8.0] 2025-12-25
 
 ### Added

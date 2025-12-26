@@ -19,6 +19,7 @@ import shlex
 from typing import Dict, Any, Optional, Set
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import executor_register
+from aipartnerupflow.core.execution.errors import ValidationError, ConfigurationError
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -92,21 +93,16 @@ class CommandExecutor(BaseTask):
         # Security check: command execution must be explicitly enabled
         if not STDIO_ALLOW_COMMAND:
             error_msg = (
-                "Command execution is disabled by default for security. "
+                f"[{self.id}] Command execution is disabled by default for security. "
                 "To enable, set environment variable: AIPARTNERUPFLOW_STDIO_ALLOW_COMMAND=1. "
                 "Consider using 'system_info_executor' instead for safer system queries."
             )
             logger.error(f"Command execution blocked: {error_msg}")
-            return {
-                "command": inputs.get("command", ""),
-                "success": False,
-                "error": error_msg,
-                "security_blocked": True
-            }
+            raise ConfigurationError(error_msg)
         
         command = inputs.get("command")
         if not command:
-            raise ValueError("command is required in inputs")
+            raise ValidationError(f"[{self.id}] command is required in inputs")
         
         # Security check: whitelist validation if configured
         if STDIO_COMMAND_WHITELIST is not None:
@@ -120,16 +116,11 @@ class CommandExecutor(BaseTask):
             
             if base_command not in STDIO_COMMAND_WHITELIST:
                 error_msg = (
-                    f"Command '{base_command}' is not in the whitelist. "
+                    f"[{self.id}] Command '{base_command}' is not in the whitelist. "
                     f"Allowed commands: {', '.join(sorted(STDIO_COMMAND_WHITELIST))}"
                 )
                 logger.error(f"Command blocked by whitelist: {command}")
-                return {
-                    "command": command,
-                    "success": False,
-                    "error": error_msg,
-                    "security_blocked": True
-                }
+                raise ConfigurationError(error_msg)
         
         timeout = inputs.get("timeout", 30)
         
@@ -139,52 +130,37 @@ class CommandExecutor(BaseTask):
             f"Ensure this is from a trusted source."
         )
         
-        try:
-            # Run command in subprocess with stdio communication
-            # Note: Using shell=True is a security risk, but required for shell commands
-            # This is why we have the whitelist and explicit enablement
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=timeout
-            )
-            
-            return_code = process.returncode
-            stdout_text = stdout.decode('utf-8', errors='replace').strip()
-            stderr_text = stderr.decode('utf-8', errors='replace').strip()
-            
-            result = {
-                "command": command,
-                "return_code": return_code,
-                "stdout": stdout_text,
-                "stderr": stderr_text,
-                "success": return_code == 0
-            }
-            
-            if return_code != 0:
-                logger.warning(f"Command failed with return code {return_code}: {stderr_text}")
-            
-            return result
-            
-        except asyncio.TimeoutError:
-            logger.error(f"Command timeout after {timeout} seconds: {command}")
-            return {
-                "command": command,
-                "success": False,
-                "error": f"Command timeout after {timeout} seconds"
-            }
-        except Exception as e:
-            logger.error(f"Error executing command: {e}", exc_info=True)
-            return {
-                "command": command,
-                "success": False,
-                "error": str(e)
-            }
+        # Run command in subprocess with stdio communication
+        # Note: Using shell=True is a security risk, but required for shell commands
+        # This is why we have the whitelist and explicit enablement
+        process = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        # Exceptions (e.g., asyncio.TimeoutError) will propagate to TaskManager
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=timeout
+        )
+        
+        return_code = process.returncode
+        stdout_text = stdout.decode('utf-8', errors='replace').strip()
+        stderr_text = stderr.decode('utf-8', errors='replace').strip()
+        
+        result = {
+            "command": command,
+            "return_code": return_code,
+            "stdout": stdout_text,
+            "stderr": stderr_text,
+            "success": return_code == 0
+        }
+        
+        if return_code != 0:
+            logger.warning(f"Command failed with return code {return_code}: {stderr_text}")
+        
+        return result
     
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo command execution result"""

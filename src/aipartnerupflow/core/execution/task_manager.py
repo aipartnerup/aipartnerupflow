@@ -25,6 +25,7 @@ from aipartnerupflow.core.execution.dependency_resolver import (
     resolve_task_dependencies,
     get_completed_tasks_by_id,
 )
+from aipartnerupflow.core.execution.errors import BusinessError
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -552,7 +553,11 @@ class TaskManager:
         except Exception as e:
             # Use saved task ID to avoid accessing node.task.id after session rollback
             task_id = str(node_task_id_for_error_handling) if node_task_id_for_error_handling else "unknown"
-            logger.error(f"Error in _execute_task_tree_recursive for task {task_id}: {str(e)}")
+            # Log business errors without stack trace, unexpected errors with stack trace
+            if isinstance(e, BusinessError):
+                logger.error(f"Business error in _execute_task_tree_recursive for task {task_id}: {str(e)}")
+            else:
+                logger.error(f"Error in _execute_task_tree_recursive for task {task_id}: {str(e)}", exc_info=True)
             try:
                 # Update task status using repository (only if we have a valid task ID)
                 if node_task_id_for_error_handling:
@@ -852,7 +857,11 @@ class TaskManager:
         except Exception as e:
             # Use saved task ID to avoid accessing task after session rollback
             task_id_str = str(task_id_for_error_handling) if task_id_for_error_handling else "unknown"
-            logger.error(f"Error executing task {task_id_str}: {str(e)}", exc_info=True)
+            # Log business errors without stack trace, unexpected errors with stack trace
+            if isinstance(e, BusinessError):
+                logger.error(f"Business error executing task {task_id_str}: {str(e)}")
+            else:
+                logger.error(f"Error executing task {task_id_str}: {str(e)}", exc_info=True)
             
             # Update task status using repository (only if we have a valid task ID)
             if task_id_for_error_handling:
@@ -1102,7 +1111,11 @@ class TaskManager:
                         try:
                             await self._execute_single_task(task, use_callback=True)
                         except Exception as e:
-                            logger.error(f"❌ Failed to execute dependent task {task.id}: {str(e)}")
+                            # Log business errors without stack trace, unexpected errors with stack trace
+                            if isinstance(e, BusinessError):
+                                logger.error(f"❌ Business error executing dependent task {task.id}: {str(e)}")
+                            else:
+                                logger.error(f"❌ Failed to execute dependent task {task.id}: {str(e)}", exc_info=True)
                             # Update task status using repository
                             await self.task_repository.update_task_status(
                                 task_id=task.id,
@@ -1393,17 +1406,18 @@ class TaskManager:
             
             return result
         except Exception as e:
-            logger.error(f"Error executing task {task.id} with executor {executor.__class__.__name__}: {e}", exc_info=True)
+            # Log business errors without stack trace, unexpected errors with stack trace
+            if isinstance(e, BusinessError):
+                logger.error(f"Business error executing task {task.id} with executor {executor.__class__.__name__}: {e}")
+            else:
+                logger.error(f"Error executing task {task.id} with executor {executor.__class__.__name__}: {e}", exc_info=True)
             # Explicitly clear task context on error to prevent memory leaks
             if hasattr(executor, 'clear_task_context'):
                 executor.clear_task_context()
             # Clear executor reference on error
             self._executor_instances.pop(task.id, None)
-            return {
-                "error": str(e),
-                "task_id": task.id,
-                "executor_id": executor_id
-            }
+            # Re-raise the exception to let TaskManager mark the task as failed
+            raise
     
 __all__ = [
     "TaskManager",

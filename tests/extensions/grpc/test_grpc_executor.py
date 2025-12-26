@@ -41,9 +41,10 @@ class TestGrpcExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_server(self):
         """Test error when server is missing"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         executor = GrpcExecutor()
         
-        with pytest.raises(ValueError, match="server is required"):
+        with pytest.raises(ValidationError, match="server is required"):
             await executor.execute({
                 "service": "Greeter",
                 "method": "SayHello",
@@ -54,9 +55,10 @@ class TestGrpcExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_service(self):
         """Test error when service is missing"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         executor = GrpcExecutor()
         
-        with pytest.raises(ValueError, match="service is required"):
+        with pytest.raises(ValidationError, match="service is required"):
             await executor.execute({
                 "server": "localhost:50051",
                 "method": "SayHello",
@@ -67,9 +69,10 @@ class TestGrpcExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_method(self):
         """Test error when method is missing"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         executor = GrpcExecutor()
         
-        with pytest.raises(ValueError, match="method is required"):
+        with pytest.raises(ValidationError, match="method is required"):
             await executor.execute({
                 "server": "localhost:50051",
                 "service": "Greeter",
@@ -79,17 +82,16 @@ class TestGrpcExecutor:
     @pytest.mark.asyncio
     async def test_execute_grpc_not_available(self):
         """Test behavior when grpcio is not installed"""
+        from aipartnerupflow.core.execution.errors import ConfigurationError
         with patch("aipartnerupflow.extensions.grpc.grpc_executor.GRPC_AVAILABLE", False):
             executor = GrpcExecutor()
-            result = await executor.execute({
-                "server": "localhost:50051",
-                "service": "Greeter",
-                "method": "SayHello",
-                "request": {}
-            })
-            
-            assert result["success"] is False
-            assert "grpcio" in result["error"].lower()
+            with pytest.raises(ConfigurationError, match="grpcio is not installed"):
+                await executor.execute({
+                    "server": "localhost:50051",
+                    "service": "Greeter",
+                    "method": "SayHello",
+                    "request": {}
+                })
     
     @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
     @pytest.mark.asyncio
@@ -156,17 +158,15 @@ class TestGrpcExecutor:
             mock_channel_instance.close = AsyncMock()
             
             # Simulate RPC error by patching asyncio.sleep to raise error
+            # RpcError should propagate
             with patch("asyncio.sleep", side_effect=mock_error):
-                result = await executor.execute({
-                    "server": "localhost:50051",
-                    "service": "Greeter",
-                    "method": "SayHello",
-                    "request": {"name": "World"}
-                })
-                
-                # The current implementation doesn't actually raise RpcError,
-                # but we can test the error handling structure
-                assert result is not None
+                with pytest.raises(grpc.RpcError):
+                    await executor.execute({
+                        "server": "localhost:50051",
+                        "service": "Greeter",
+                        "method": "SayHello",
+                        "request": {"name": "World"}
+                    })
     
     @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
     @pytest.mark.asyncio

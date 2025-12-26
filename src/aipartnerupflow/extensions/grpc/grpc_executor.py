@@ -9,6 +9,7 @@ import asyncio
 from typing import Dict, Any, Optional
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import executor_register
+from aipartnerupflow.core.execution.errors import ValidationError, ConfigurationError
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -90,22 +91,21 @@ class GrpcExecutor(BaseTask):
                 - metadata: Response metadata
         """
         if not GRPC_AVAILABLE:
-            return {
-                "success": False,
-                "error": "grpcio is not installed. Install it with: pip install aipartnerupflow[grpc]"
-            }
+            raise ConfigurationError(
+                f"[{self.id}] grpcio is not installed. Install it with: pip install aipartnerupflow[grpc]"
+            )
         
         server = inputs.get("server")
         if not server:
-            raise ValueError("server is required in inputs")
+            raise ValidationError(f"[{self.id}] server is required in inputs")
         
         service = inputs.get("service")
         if not service:
-            raise ValueError("service is required in inputs")
+            raise ValidationError(f"[{self.id}] service is required in inputs")
         
         method = inputs.get("method")
         if not method:
-            raise ValueError("method is required in inputs")
+            raise ValidationError(f"[{self.id}] method is required in inputs")
         
         request_data = inputs.get("request", {})
         timeout = inputs.get("timeout", 30.0)
@@ -113,101 +113,81 @@ class GrpcExecutor(BaseTask):
         
         logger.info(f"Calling gRPC {service}.{method} on {server}")
         
+        # Create gRPC channel
+        # Exceptions (e.g., grpc.RpcError) will propagate to TaskManager
+        channel = grpc.aio.insecure_channel(server)
+        
         try:
-            # Create gRPC channel
-            channel = grpc.aio.insecure_channel(server)
-            
-            try:
-                # Check for cancellation before making call
-                if self.cancellation_checker and self.cancellation_checker():
-                    logger.info("gRPC call cancelled before execution")
-                    await channel.close()
-                    return {
-                        "success": False,
-                        "error": "Call was cancelled",
-                        "server": server,
-                        "service": service,
-                        "method": method
-                    }
-                
-                # Prepare metadata
-                metadata = []
-                if metadata_dict:
-                    for key, value in metadata_dict.items():
-                        metadata.append((key, str(value)))
-                
-                # Note: For full gRPC support, we would need to:
-                # 1. Load and compile proto files
-                # 2. Generate stub classes
-                # 3. Use proper message types
-                # 
-                # This is a simplified implementation that demonstrates
-                # the structure. In production, you would need to:
-                # - Use grpcio-tools to compile proto files
-                # - Import generated stubs
-                # - Use proper message types
-                
-                # For now, we'll return a structured response indicating
-                # that full proto support needs to be implemented
-                logger.warning(
-                    "gRPC executor is using simplified implementation. "
-                    "For full functionality, proto files need to be compiled and stubs generated."
-                )
-                
-                # Simulate async call (in real implementation, this would use generated stubs)
-                await asyncio.sleep(0.1)  # Simulate network delay
-                
-                # Check for cancellation after call
-                if self.cancellation_checker and self.cancellation_checker():
-                    logger.info("gRPC call cancelled after execution")
-                    await channel.close()
-                    return {
-                        "success": False,
-                        "error": "Call was cancelled",
-                        "server": server,
-                        "service": service,
-                        "method": method
-                    }
-                
-                # Return structured response
-                # In real implementation, this would parse the actual gRPC response
-                result = {
-                    "success": True,
+            # Check for cancellation before making call
+            if self.cancellation_checker and self.cancellation_checker():
+                logger.info("gRPC call cancelled before execution")
+                await channel.close()
+                return {
+                    "success": False,
+                    "error": "Call was cancelled",
                     "server": server,
                     "service": service,
-                    "method": method,
-                    "request": request_data,
-                    "response": {
-                        "message": "gRPC call executed (simplified implementation)",
-                        "note": "For full functionality, compile proto files and use generated stubs"
-                    },
-                    "metadata": dict(metadata) if metadata else {}
+                    "method": method
                 }
-                
-                return result
-                
-            finally:
+            
+            # Prepare metadata
+            metadata = []
+            if metadata_dict:
+                for key, value in metadata_dict.items():
+                    metadata.append((key, str(value)))
+            
+            # Note: For full gRPC support, we would need to:
+            # 1. Load and compile proto files
+            # 2. Generate stub classes
+            # 3. Use proper message types
+            # 
+            # This is a simplified implementation that demonstrates
+            # the structure. In production, you would need to:
+            # - Use grpcio-tools to compile proto files
+            # - Import generated stubs
+            # - Use proper message types
+            
+            # For now, we'll return a structured response indicating
+            # that full proto support needs to be implemented
+            logger.warning(
+                "gRPC executor is using simplified implementation. "
+                "For full functionality, proto files need to be compiled and stubs generated."
+            )
+            
+            # Simulate async call (in real implementation, this would use generated stubs)
+            await asyncio.sleep(0.1)  # Simulate network delay
+            
+            # Check for cancellation after call
+            if self.cancellation_checker and self.cancellation_checker():
+                logger.info("gRPC call cancelled after execution")
                 await channel.close()
-                
-        except grpc.RpcError as e:
-            logger.error(f"gRPC error: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": f"gRPC error: {str(e)}",
-                "code": e.code().name if hasattr(e, 'code') else None,
+                return {
+                    "success": False,
+                    "error": "Call was cancelled",
+                    "server": server,
+                    "service": service,
+                    "method": method
+                }
+            
+            # Return structured response
+            # In real implementation, this would parse the actual gRPC response
+            result = {
+                "success": True,
                 "server": server,
                 "service": service,
-                "method": method
+                "method": method,
+                "request": request_data,
+                "response": {
+                    "message": "gRPC call executed (simplified implementation)",
+                    "note": "For full functionality, compile proto files and use generated stubs"
+                },
+                "metadata": dict(metadata) if metadata else {}
             }
-        except Exception as e:
-            logger.error(f"Unexpected error executing gRPC call: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "server": server,
-                "service": service,
-                "method": method
-            }
+            
+            return result
+            
+        finally:
+            await channel.close()
     
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo gRPC call result"""

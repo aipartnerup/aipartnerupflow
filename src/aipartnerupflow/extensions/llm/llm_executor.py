@@ -6,6 +6,7 @@ import os
 import json
 from typing import Dict, Any, Optional, List, Union
 from aipartnerupflow.core.base import BaseTask
+from aipartnerupflow.core.execution.errors import ValidationError
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -87,13 +88,13 @@ class LLMExecutor(BaseTask):
         Returns:
             Dict containing response or generator for streaming
         """
-        model = inputs.get("model")
+        model = model = inputs.get("model")
         if not model:
-            raise ValueError("model is required in inputs")
+            raise ValidationError(f"[{self.id}] model is required in inputs")
             
         messages = inputs.get("messages")
         if not messages:
-            raise ValueError("messages is required in inputs")
+            raise ValidationError(f"[{self.id}] messages is required in inputs")
             
         if self.context and hasattr(self.context, "metadata") and self.context.metadata.get("stream"):
             stream = True
@@ -121,52 +122,45 @@ class LLMExecutor(BaseTask):
         
         logger.info(f"Executing LLM request: model={model}, stream={stream}")
         
-        try:
-            # Use acompletion for async execution
-            response = await litellm.acompletion(**completion_kwargs)
-            
-            if stream:
-                # For streaming, we return a generator wrapper or the generator itself.
-                # Since TaskExecutor usually expects a result dict, we might need to wrap it.
-                # However, usually 'execute' should return the final result or a specific structure.
-                # If the system supports streaming via returned generator, we return it.
-                # Based on RestExecutor, it returns a dict.
-                # If streaming is requested, we can return the generator in a 'stream' key
-                # or similar, IF the caller knows how to handle it.
-                # Given user request "support post and sse", implies web interface usage.
-                # We return the raw object so the caller (API layer) can stream it.
-                return {
-                    "success": True,
-                    "stream": response, # Async generator
-                    "model": model,
-                    "is_stream": True
-                }
-            
-            # Non-streaming response
-            # litellm returns a ModelResponse object (pydantic-like or dict-like)
-            # We convert to dict
-            result_dict = response.model_dump() if hasattr(response, "model_dump") else dict(response)
-            
-            # Extract content for convenience
-            content = None
-            if "choices" in result_dict and len(result_dict["choices"]) > 0:
-                content = result_dict["choices"][0].get("message", {}).get("content")
-            
+        # Use acompletion for async execution
+        # Exceptions (e.g., litellm.AuthenticationError, litellm.APIConnectionError) 
+        # will propagate to TaskManager
+        response = await litellm.acompletion(**completion_kwargs)
+        
+        if stream:
+            # For streaming, we return a generator wrapper or the generator itself.
+            # Since TaskExecutor usually expects a result dict, we might need to wrap it.
+            # However, usually 'execute' should return the final result or a specific structure.
+            # If the system supports streaming via returned generator, we return it.
+            # Based on RestExecutor, it returns a dict.
+            # If streaming is requested, we can return the generator in a 'stream' key
+            # or similar, IF the caller knows how to handle it.
+            # Given user request "support post and sse", implies web interface usage.
+            # We return the raw object so the caller (API layer) can stream it.
             return {
                 "success": True,
-                "data": result_dict,
-                "content": content,
+                "stream": response, # Async generator
                 "model": model,
-                "is_stream": False
+                "is_stream": True
             }
-            
-        except Exception as e:
-            logger.error(f"LLM execution failed: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "model": model
-            }
+        
+        # Non-streaming response
+        # litellm returns a ModelResponse object (pydantic-like or dict-like)
+        # We convert to dict
+        result_dict = response.model_dump() if hasattr(response, "model_dump") else dict(response)
+        
+        # Extract content for convenience
+        content = None
+        if "choices" in result_dict and len(result_dict["choices"]) > 0:
+            content = result_dict["choices"][0].get("message", {}).get("content")
+        
+        return {
+            "success": True,
+            "data": result_dict,
+            "content": content,
+            "model": model,
+            "is_stream": False
+        }
 
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo LLM response"""

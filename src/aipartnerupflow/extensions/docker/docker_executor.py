@@ -9,6 +9,7 @@ import asyncio
 from typing import Dict, Any, Optional, List
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import executor_register
+from aipartnerupflow.core.execution.errors import ValidationError, ConfigurationError
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -73,7 +74,7 @@ class DockerExecutor(BaseTask):
     def _get_client(self):
         """Get Docker client instance"""
         if not DOCKER_AVAILABLE:
-            raise ImportError(
+            raise ConfigurationError(
                 "docker is not installed. Install it with: pip install aipartnerupflow[docker]"
             )
         
@@ -111,18 +112,17 @@ class DockerExecutor(BaseTask):
                 - success: Boolean indicating success (exit_code == 0)
         """
         if not DOCKER_AVAILABLE:
-            return {
-                "success": False,
-                "error": "docker is not installed. Install it with: pip install aipartnerupflow[docker]"
-            }
+            raise ConfigurationError(
+                "docker is not installed. Install it with: pip install aipartnerupflow[docker]"
+            )
         
         image = inputs.get("image")
         if not image:
-            raise ValueError("image is required in inputs")
+            raise ValidationError(f"[{self.id}] image is required in inputs")
         
         command = inputs.get("command")
         if not command:
-            raise ValueError("command is required in inputs")
+            raise ValidationError(f"[{self.id}] command is required in inputs")
         
         env = inputs.get("env", {})
         volumes = inputs.get("volumes", {})
@@ -133,139 +133,115 @@ class DockerExecutor(BaseTask):
         
         logger.info(f"Executing Docker command in image {image}: {command}")
         
+        client = self._get_client()
+        
+        # Check for cancellation before creating container
+        if self.cancellation_checker and self.cancellation_checker():
+            logger.info("Docker command cancelled before container creation")
+            return {
+                "success": False,
+                "error": "Command was cancelled",
+                "image": image,
+                "command": command
+            }
+        
+        # Prepare volume mounts
+        volume_mounts = []
+        if volumes:
+            for host_path, container_path in volumes.items():
+                volume_mounts.append(f"{host_path}:{container_path}")
+        
+        # Prepare resource limits
+        mem_limit = resources_config.get("memory")
+        cpu_limit = resources_config.get("cpu")
+        
+        # Exceptions (e.g., docker.errors.ImageNotFound, docker.errors.APIError)
+        # will propagate to TaskManager
+        # Create container
+        container = client.containers.create(
+            image=image,
+            command=command,
+            environment=env if env else None,
+            volumes=volume_mounts if volume_mounts else None,
+            working_dir=working_dir,
+            detach=True,
+            mem_limit=mem_limit,
+            cpu_period=100000,  # Default CPU period
+            cpu_quota=int(float(cpu_limit) * 100000) if cpu_limit else None,
+        )
+        
+        container_id = container.id
+        logger.debug(f"Created container {container_id}")
+        
         try:
-            client = self._get_client()
-            
-            # Check for cancellation before creating container
+            # Check for cancellation before starting
             if self.cancellation_checker and self.cancellation_checker():
-                logger.info("Docker command cancelled before container creation")
+                logger.info("Docker command cancelled before container start")
+                # Container was created but not started
+                # Removal will be handled in finally block
                 return {
                     "success": False,
                     "error": "Command was cancelled",
                     "image": image,
-                    "command": command
+                    "command": command,
+                    "container_id": container_id
                 }
             
-            # Prepare volume mounts
-            volume_mounts = []
-            if volumes:
-                for host_path, container_path in volumes.items():
-                    volume_mounts.append(f"{host_path}:{container_path}")
+            # Start container
+            container.start()
+            logger.debug(f"Started container {container_id}")
             
-            # Prepare resource limits
-            mem_limit = resources_config.get("memory")
-            cpu_limit = resources_config.get("cpu")
-            
-            # Create container
-            container = client.containers.create(
-                image=image,
-                command=command,
-                environment=env if env else None,
-                volumes=volume_mounts if volume_mounts else None,
-                working_dir=working_dir,
-                detach=True,
-                mem_limit=mem_limit,
-                cpu_period=100000,  # Default CPU period
-                cpu_quota=int(float(cpu_limit) * 100000) if cpu_limit else None,
-            )
-            
-            container_id = container.id
-            logger.debug(f"Created container {container_id}")
-            
+            # Wait for container to finish with timeout
             try:
-                # Check for cancellation before starting
-                if self.cancellation_checker and self.cancellation_checker():
-                    logger.info("Docker command cancelled before container start")
-                    # Container was created but not started
-                    # Removal will be handled in finally block
-                    return {
-                        "success": False,
-                        "error": "Command was cancelled",
-                        "image": image,
-                        "command": command,
-                        "container_id": container_id
-                    }
-                
-                # Start container
-                container.start()
-                logger.debug(f"Started container {container_id}")
-                
-                # Wait for container to finish with timeout
-                try:
-                    wait_result = await asyncio.wait_for(
-                        asyncio.to_thread(container.wait),
-                        timeout=timeout
-                    )
-                    # Extract StatusCode from wait result
-                    exit_code = wait_result.get("StatusCode", -1) if isinstance(wait_result, dict) else wait_result
-                except asyncio.TimeoutError:
-                    logger.warning(f"Container {container_id} timeout after {timeout} seconds, stopping...")
-                    container.stop(timeout=5)
-                    exit_code = -1
-                
-                # Check for cancellation after execution
-                if self.cancellation_checker and self.cancellation_checker():
-                    logger.info("Docker command cancelled after execution")
-                    # Removal will be handled in finally block
-                    return {
-                        "success": False,
-                        "error": "Command was cancelled",
-                        "image": image,
-                        "command": command,
-                        "container_id": container_id,
-                        "exit_code": exit_code
-                    }
-                
-                # Get logs
-                logs = container.logs(stdout=True, stderr=True).decode('utf-8', errors='replace')
-                
-                result = {
-                    "container_id": container_id,
-                    "logs": logs,
-                    "exit_code": exit_code,
-                    "success": exit_code == 0,
+                wait_result = await asyncio.wait_for(
+                    asyncio.to_thread(container.wait),
+                    timeout=timeout
+                )
+                # Extract StatusCode from wait result
+                exit_code = wait_result.get("StatusCode", -1) if isinstance(wait_result, dict) else wait_result
+            except asyncio.TimeoutError:
+                logger.warning(f"Container {container_id} timeout after {timeout} seconds, stopping...")
+                container.stop(timeout=5)
+                exit_code = -1
+            
+            # Check for cancellation after execution
+            if self.cancellation_checker and self.cancellation_checker():
+                logger.info("Docker command cancelled after execution")
+                # Removal will be handled in finally block
+                return {
+                    "success": False,
+                    "error": "Command was cancelled",
                     "image": image,
-                    "command": command
+                    "command": command,
+                    "container_id": container_id,
+                    "exit_code": exit_code
                 }
-                
-                if exit_code != 0:
-                    logger.warning(f"Container {container_id} exited with code {exit_code}")
-                
-                return result
-                
-            finally:
-                # Remove container if requested
-                if remove:
-                    try:
-                        container.remove(force=True)
-                        logger.debug(f"Removed container {container_id}")
-                    except Exception as e:
-                        logger.warning(f"Failed to remove container {container_id}: {e}")
-                
-        except docker.errors.ImageNotFound:
-            logger.error(f"Docker image not found: {image}")
-            return {
-                "success": False,
-                "error": f"Docker image not found: {image}",
+            
+            # Get logs
+            logs = container.logs(stdout=True, stderr=True).decode('utf-8', errors='replace')
+            
+            result = {
+                "container_id": container_id,
+                "logs": logs,
+                "exit_code": exit_code,
+                "success": exit_code == 0,
                 "image": image,
                 "command": command
             }
-        except docker.errors.APIError as e:
-            logger.error(f"Docker API error: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": f"Docker API error: {str(e)}",
-                "image": image,
-                "command": command
-            }
-        except Exception as e:
-            logger.error(f"Unexpected error executing Docker command: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "image": image,
-                "command": command
-            }
+            
+            if exit_code != 0:
+                logger.warning(f"Container {container_id} exited with code {exit_code}")
+            
+            return result
+            
+        finally:
+            # Remove container if requested
+            if remove:
+                try:
+                    container.remove(force=True)
+                    logger.debug(f"Removed container {container_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove container {container_id}: {e}")
     
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""

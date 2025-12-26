@@ -11,6 +11,7 @@ import stat
 from typing import Dict, Any, Optional
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import executor_register
+from aipartnerupflow.core.execution.errors import ValidationError, ConfigurationError
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -114,66 +115,69 @@ class SshExecutor(BaseTask):
         # This ensures tests can verify validation logic even when asyncssh is not installed
         host = inputs.get("host")
         if not host:
-            raise ValueError("host is required")
+            raise ValidationError(f"[{self.id}] host is required")
         
         username = inputs.get("username")
         if not username:
-            raise ValueError("username is required")
+            raise ValidationError(f"[{self.id}] username is required")
         
         command = inputs.get("command")
         if not command:
-            raise ValueError("command is required")
+            raise ValidationError(f"[{self.id}] command is required")
         
         # Check if asyncssh is available before authentication validation
-        # If not available, return error immediately (allows tests to verify asyncssh-not-available
-        # behavior even without complete authentication inputs)
+        # If not available, raise ConfigurationError immediately
         if not ASYNCSSH_AVAILABLE:
-            return {
-                "success": False,
-                "error": "asyncssh is not installed. Install it with: pip install aipartnerupflow[ssh]"
-            }
+            raise ConfigurationError(
+                f"[{self.id}] asyncssh is not installed. Install it with: pip install aipartnerupflow[ssh]"
+            )
         
         # Validate authentication (only if asyncssh is available)
         password = inputs.get("password")
         key_file = inputs.get("key_file")
         if not password and not key_file:
-            raise ValueError("Either password or key_file must be provided")
+            raise ValidationError(f"[{self.id}] Either password or key_file must be provided")
         
         port = inputs.get("port", 22)
         timeout = inputs.get("timeout", 30)
         env = inputs.get("env", {})
         
         # Validate key file if provided
+        # Exceptions from _validate_key_file (e.g., FileNotFoundError) will propagate
         if key_file:
-            try:
-                self._validate_key_file(key_file)
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": f"SSH key file validation failed: {str(e)}",
-                    "host": host,
-                    "command": command
-                }
+            self._validate_key_file(key_file)
         
         logger.info(f"Executing SSH command on {username}@{host}:{port}: {command}")
         
-        try:
-            # Prepare client kwargs
-            client_kwargs = {
+        # Prepare client kwargs
+        client_kwargs = {
+            "host": host,
+            "port": port,
+            "username": username,
+        }
+        
+        # Add authentication
+        if key_file:
+            client_kwargs["client_keys"] = [key_file]
+        if password:
+            client_kwargs["password"] = password
+        
+        # Check for cancellation before connecting
+        if self.cancellation_checker and self.cancellation_checker():
+            logger.info("SSH command cancelled before connection")
+            return {
+                "success": False,
+                "error": "Command was cancelled",
                 "host": host,
-                "port": port,
-                "username": username,
+                "command": command
             }
-            
-            # Add authentication
-            if key_file:
-                client_kwargs["client_keys"] = [key_file]
-            if password:
-                client_kwargs["password"] = password
-            
-            # Check for cancellation before connecting
+        
+        # Exceptions (e.g., asyncssh.Error, asyncio.TimeoutError)
+        # will propagate to TaskManager
+        async with asyncssh.connect(**client_kwargs) as conn:
+            # Check for cancellation after connection
             if self.cancellation_checker and self.cancellation_checker():
-                logger.info("SSH command cancelled before connection")
+                logger.info("SSH command cancelled after connection")
                 return {
                     "success": False,
                     "error": "Command was cancelled",
@@ -181,71 +185,35 @@ class SshExecutor(BaseTask):
                     "command": command
                 }
             
-            async with asyncssh.connect(**client_kwargs) as conn:
-                # Check for cancellation after connection
-                if self.cancellation_checker and self.cancellation_checker():
-                    logger.info("SSH command cancelled after connection")
-                    return {
-                        "success": False,
-                        "error": "Command was cancelled",
-                        "host": host,
-                        "command": command
-                    }
-                
-                # Prepare environment variables
-                env_vars = " ".join([f"{k}={v}" for k, v in env.items()]) if env else ""
-                full_command = f"{env_vars} {command}".strip() if env_vars else command
-                
-                # Execute command with timeout
-                result = await asyncio.wait_for(
-                    conn.run(full_command),
-                    timeout=timeout
-                )
-                
-                # Check for cancellation after execution
-                if self.cancellation_checker and self.cancellation_checker():
-                    logger.info("SSH command cancelled after execution")
-                    return {
-                        "success": False,
-                        "error": "Command was cancelled",
-                        "host": host,
-                        "command": command,
-                        "return_code": result.exit_status
-                    }
-                
+            # Prepare environment variables
+            env_vars = " ".join([f"{k}={v}" for k, v in env.items()]) if env else ""
+            full_command = f"{env_vars} {command}".strip() if env_vars else command
+            
+            # Execute command with timeout
+            result = await asyncio.wait_for(
+                conn.run(full_command),
+                timeout=timeout
+            )
+            
+            # Check for cancellation after execution
+            if self.cancellation_checker and self.cancellation_checker():
+                logger.info("SSH command cancelled after execution")
                 return {
-                    "command": command,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "return_code": result.exit_status,
-                    "success": result.exit_status == 0,
+                    "success": False,
+                    "error": "Command was cancelled",
                     "host": host,
-                    "username": username
+                    "command": command,
+                    "return_code": result.exit_status
                 }
-                
-        except asyncio.TimeoutError:
-            logger.error(f"SSH command timeout after {timeout} seconds: {command}")
+            
             return {
-                "success": False,
-                "error": f"Command timeout after {timeout} seconds",
+                "command": command,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "return_code": result.exit_status,
+                "success": result.exit_status == 0,
                 "host": host,
-                "command": command
-            }
-        except asyncssh.Error as e:
-            logger.error(f"SSH connection error: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": f"SSH error: {str(e)}",
-                "host": host,
-                "command": command
-            }
-        except Exception as e:
-            logger.error(f"Unexpected error executing SSH command: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "host": host,
-                "command": command
+                "username": username
             }
     
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:

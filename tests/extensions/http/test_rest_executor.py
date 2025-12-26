@@ -130,20 +130,20 @@ class TestRestExecutor:
             mock_client.return_value.__aenter__.return_value = mock_client_instance
             mock_client_instance.request = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
             
-            result = await executor.execute({
-                "url": "https://api.example.com/test",
-                "timeout": 5.0
-            })
-            
-            assert result["success"] is False
-            assert "timeout" in result["error"].lower()
+            # httpx.TimeoutException should propagate
+            with pytest.raises(httpx.TimeoutException, match="Timeout"):
+                await executor.execute({
+                    "url": "https://api.example.com/test",
+                    "timeout": 5.0
+                })
     
     @pytest.mark.asyncio
     async def test_execute_missing_url(self):
         """Test error when URL is missing"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         executor = RestExecutor()
         
-        with pytest.raises(ValueError, match="url is required"):
+        with pytest.raises(ValidationError, match="url is required"):
             await executor.execute({})
     
     @pytest.mark.asyncio
@@ -285,12 +285,11 @@ class TestRestExecutor:
             mock_client.return_value.__aenter__.return_value = mock_client_instance
             mock_client_instance.request = AsyncMock(side_effect=httpx.RequestError("Connection error"))
             
-            result = await executor.execute({
-                "url": "https://api.example.com/test"
-            })
-            
-            assert result["success"] is False
-            assert "error" in result
+            # RequestError should propagate
+            with pytest.raises(httpx.RequestError, match="Connection error"):
+                await executor.execute({
+                    "url": "https://api.example.com/test"
+                })
     
     @pytest.mark.asyncio
     async def test_execute_cancellation_before_request(self):

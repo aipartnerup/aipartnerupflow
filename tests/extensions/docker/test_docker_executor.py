@@ -43,9 +43,10 @@ class TestDockerExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_image(self):
         """Test error when image is missing"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         executor = DockerExecutor()
         
-        with pytest.raises(ValueError, match="image is required"):
+        with pytest.raises(ValidationError, match="image is required"):
             await executor.execute({
                 "command": "ls"
             })
@@ -54,9 +55,10 @@ class TestDockerExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_command(self):
         """Test error when command is missing"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         executor = DockerExecutor()
         
-        with pytest.raises(ValueError, match="command is required"):
+        with pytest.raises(ValidationError, match="command is required"):
             await executor.execute({
                 "image": "python:3.11"
             })
@@ -64,15 +66,14 @@ class TestDockerExecutor:
     @pytest.mark.asyncio
     async def test_execute_docker_not_available(self):
         """Test behavior when docker is not installed"""
+        from aipartnerupflow.core.execution.errors import ConfigurationError
         with patch("aipartnerupflow.extensions.docker.docker_executor.DOCKER_AVAILABLE", False):
             executor = DockerExecutor()
-            result = await executor.execute({
-                "image": "python:3.11",
-                "command": "ls"
-            })
-            
-            assert result["success"] is False
-            assert "docker" in result["error"].lower()
+            with pytest.raises(ConfigurationError, match="docker is not installed"):
+                await executor.execute({
+                    "image": "python:3.11",
+                    "command": "ls"
+                })
     
     @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
     @pytest.mark.asyncio
@@ -217,13 +218,12 @@ class TestDockerExecutor:
         
         executor._client = mock_client
         
-        result = await executor.execute({
-            "image": "nonexistent:latest",
-            "command": "ls"
-        })
-        
-        assert result["success"] is False
-        assert "not found" in result["error"].lower()
+        # ImageNotFound exception should propagate
+        with pytest.raises(docker.errors.ImageNotFound):
+            await executor.execute({
+                "image": "nonexistent:latest",
+                "command": "ls"
+            })
     
     @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
     @pytest.mark.asyncio

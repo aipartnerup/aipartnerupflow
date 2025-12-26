@@ -22,6 +22,7 @@ class TestCommandExecutorSecurity:
     @pytest.mark.asyncio
     async def test_command_disabled_with_various_values(self, env_value):
         """Test that command execution is disabled with various false values"""
+        from aipartnerupflow.core.execution.errors import ConfigurationError
         # Set environment variable to disabled value
         env_dict = {}
         if env_value is not None:
@@ -47,14 +48,11 @@ class TestCommandExecutorSecurity:
             # Create a new executor instance (will use the reloaded module's STDIO_ALLOW_COMMAND)
             executor = command_module.CommandExecutor()
             
-            result = await executor.execute({
-                "command": "echo test"
-            })
-            
-            assert result["success"] is False
-            assert "security_blocked" in result
-            assert result["security_blocked"] is True
-            assert "disabled" in result["error"].lower()
+            # Should raise ConfigurationError when disabled
+            with pytest.raises(ConfigurationError, match="disabled"):
+                await executor.execute({
+                    "command": "echo test"
+                })
 
     @pytest.mark.parametrize("env_value", ["1", "true", "yes", "on"])
     @pytest.mark.asyncio
@@ -125,6 +123,7 @@ class TestCommandExecutorSecurity:
     @pytest.mark.asyncio
     async def test_command_required_when_enabled(self, env_value):
         """Test that command parameter is required when execution is enabled"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         with patch.dict(os.environ, {"AIPARTNERUPFLOW_STDIO_ALLOW_COMMAND": env_value}, clear=False):
             # Reload the module to pick up the enabled state
             import aipartnerupflow.extensions.stdio.command_executor as command_module
@@ -144,14 +143,15 @@ class TestCommandExecutorSecurity:
             
             executor = command_module.CommandExecutor()
             
-            # When command execution is enabled, missing command should raise ValueError
-            with pytest.raises(ValueError, match="command is required"):
+            # When command execution is enabled, missing command should raise ValidationError
+            with pytest.raises(ValidationError, match="command is required"):
                 await executor.execute({})
 
     @pytest.mark.parametrize("env_value", ["1", "true", "yes", "on"])
     @pytest.mark.asyncio
     async def test_command_whitelist_validation_when_enabled(self, env_value):
         """Test that whitelist validation works when command execution is enabled"""
+        from aipartnerupflow.core.execution.errors import ConfigurationError
         # Set both allow command and whitelist
         with patch.dict(os.environ, {
             "AIPARTNERUPFLOW_STDIO_ALLOW_COMMAND": env_value,
@@ -181,14 +181,11 @@ class TestCommandExecutorSecurity:
             })
             assert result["success"] is True
             
-            # Try a command not in whitelist - should be blocked
-            result = await executor.execute({
-                "command": "nonexistent_command_xyz"
-            })
-            assert result["success"] is False
-            assert "security_blocked" in result
-            assert result["security_blocked"] is True
-            assert "whitelist" in result["error"].lower()
+            # Try a command not in whitelist - should raise ConfigurationError
+            with pytest.raises(ConfigurationError, match="whitelist"):
+                await executor.execute({
+                    "command": "nonexistent_command_xyz"
+                })
 
     def test_whitelist_validation_structure(self):
         """Test that whitelist validation structure is correct"""

@@ -80,9 +80,10 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_host(self):
         """Test error when host is missing"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         executor = SshExecutor()
         
-        with pytest.raises(ValueError, match="host is required"):
+        with pytest.raises(ValidationError, match="host is required"):
             await executor.execute({
                 "username": "user",
                 "command": "ls"
@@ -91,9 +92,10 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_username(self):
         """Test error when username is missing"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         executor = SshExecutor()
         
-        with pytest.raises(ValueError, match="username is required"):
+        with pytest.raises(ValidationError, match="username is required"):
             await executor.execute({
                 "host": "example.com",
                 "command": "ls"
@@ -102,9 +104,10 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_command(self):
         """Test error when command is missing"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         executor = SshExecutor()
         
-        with pytest.raises(ValueError, match="command is required"):
+        with pytest.raises(ValidationError, match="command is required"):
             await executor.execute({
                 "host": "example.com",
                 "username": "user"
@@ -113,11 +116,12 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_auth(self):
         """Test error when neither password nor key_file is provided"""
+        from aipartnerupflow.core.execution.errors import ValidationError
         # Mock ASYNCSSH_AVAILABLE = True to test authentication validation logic
         with patch("aipartnerupflow.extensions.ssh.ssh_executor.ASYNCSSH_AVAILABLE", True):
             executor = SshExecutor()
             
-            with pytest.raises(ValueError, match="Either password or key_file"):
+            with pytest.raises(ValidationError, match="Either password or key_file"):
                 await executor.execute({
                     "host": "example.com",
                     "username": "user",
@@ -127,16 +131,15 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_asyncssh_not_available(self):
         """Test behavior when asyncssh is not installed"""
+        from aipartnerupflow.core.execution.errors import ConfigurationError
         with patch("aipartnerupflow.extensions.ssh.ssh_executor.ASYNCSSH_AVAILABLE", False):
             executor = SshExecutor()
-            result = await executor.execute({
-                "host": "example.com",
-                "username": "user",
-                "command": "ls"
-            })
-            
-            assert result["success"] is False
-            assert "asyncssh" in result["error"].lower()
+            with pytest.raises(ConfigurationError, match="asyncssh is not installed"):
+                await executor.execute({
+                    "host": "example.com",
+                    "username": "user",
+                    "command": "ls"
+                })
     
     @pytest.mark.skipif(not ASYNCSSH_AVAILABLE, reason="asyncssh not installed")
     @pytest.mark.asyncio
@@ -271,16 +274,15 @@ class TestSshExecutor:
             mock_connect.return_value = mock_conn
             mock_wait.side_effect = asyncio.TimeoutError()
             
-            result = await executor.execute({
-                "host": "example.com",
-                "username": "user",
-                "key_file": "/path/to/key",
-                "command": "sleep 100",
-                "timeout": 5
-            })
-            
-            assert result["success"] is False
-            assert "timeout" in result["error"].lower()
+            # asyncio.TimeoutError should propagate
+            with pytest.raises(asyncio.TimeoutError):
+                await executor.execute({
+                    "host": "example.com",
+                    "username": "user",
+                    "key_file": "/path/to/key",
+                    "command": "sleep 100",
+                    "timeout": 5
+                })
     
     @pytest.mark.skipif(not ASYNCSSH_AVAILABLE, reason="asyncssh not installed")
     @pytest.mark.asyncio
@@ -289,7 +291,7 @@ class TestSshExecutor:
         executor = SshExecutor()
         
         # Since asyncssh.Error is hard to construct, we'll test the error handling
-        # by making the connection raise an exception that will be caught
+        # by making the connection raise an exception that will propagate
         with patch("os.path.exists", return_value=True), \
              patch("os.stat") as mock_stat, \
              patch("asyncssh.connect") as mock_connect:
@@ -298,23 +300,18 @@ class TestSshExecutor:
             mock_stat_result.st_mode = 0o600
             mock_stat.return_value = mock_stat_result
             
-            # Create a connection error - any exception will be caught
-            # The code catches asyncssh.Error specifically, but also has a general Exception handler
-            # We'll use a generic exception that will be caught by the general handler
+            # Create a connection error - exceptions will propagate
             connection_error = Exception("Connection refused")
             mock_connect.side_effect = connection_error
             
-            result = await executor.execute({
-                "host": "example.com",
-                "username": "user",
-                "key_file": "/path/to/key",
-                "command": "ls"
-            })
-            
-            assert result["success"] is False
-            assert "error" in result
-            # The error will be caught by the general Exception handler
-            assert "Connection refused" in result["error"] or "error" in result
+            # Connection exceptions should propagate
+            with pytest.raises(Exception, match="Connection refused"):
+                await executor.execute({
+                    "host": "example.com",
+                    "username": "user",
+                    "key_file": "/path/to/key",
+                    "command": "ls"
+                })
     
     @pytest.mark.skipif(not ASYNCSSH_AVAILABLE, reason="asyncssh not installed")
     @pytest.mark.asyncio
@@ -360,10 +357,23 @@ class TestSshExecutor:
             os.chmod(key_file, 0o644)
             
             with patch("os.path.exists", return_value=True), \
-                 patch("os.stat") as mock_stat:
+                 patch("os.stat") as mock_stat, \
+                 patch("asyncssh.connect") as mock_connect:
                 mock_stat_result = MagicMock()
                 mock_stat_result.st_mode = 0o644
                 mock_stat.return_value = mock_stat_result
+                
+                # Mock successful connection
+                mock_result = MagicMock()
+                mock_result.stdout = "output"
+                mock_result.stderr = ""
+                mock_result.exit_status = 0
+                
+                mock_conn = AsyncMock()
+                mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+                mock_conn.__aexit__ = AsyncMock(return_value=None)
+                mock_conn.run = AsyncMock(return_value=mock_result)
+                mock_connect.return_value = mock_conn
                 
                 result = await executor.execute({
                     "host": "example.com",
@@ -374,6 +384,7 @@ class TestSshExecutor:
                 
                 # Should still work but log warning
                 # The validation is a warning, not an error
+                assert result["success"] is True
         finally:
             if os.path.exists(key_file):
                 os.unlink(key_file)

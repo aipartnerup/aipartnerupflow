@@ -146,6 +146,7 @@ pytest -v
 2. **Test functions**: Prefix with `test_`
 3. **Use fixtures**: See `tests/conftest.py` for available fixtures
 4. **Async tests**: Use `@pytest.mark.asyncio` for async functions
+5. **Test isolation**: Ensure tests don't depend on execution order or side effects from other tests
 
 **Example:**
 ```python
@@ -166,6 +167,40 @@ async def test_task_creation():
     assert task.id is not None
     assert task.name == "test_task"
 ```
+
+#### Test Isolation Best Practices
+
+When writing tests that use the extension registry or other global state:
+
+1. **Use `autouse=True` fixtures** to ensure required setup runs before each test:
+   ```python
+   @pytest.fixture(autouse=True)
+   def ensure_executor_registered():
+       """Ensure custom executor is registered before each test"""
+       from aipartnerupflow.core.extensions import get_registry
+       
+       registry = get_registry()
+       if not registry.is_registered("custom_executor"):
+           registry.register(
+               extension=CustomExecutor(),
+               executor_class=CustomExecutor,
+               override=True
+           )
+       yield
+   ```
+
+2. **Skip tests when optional dependencies are unavailable**:
+   ```python
+   from aipartnerupflow.extensions.llm.llm_executor import LITELLM_AVAILABLE
+   
+   @pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
+   @pytest.mark.asyncio
+   async def test_llm_feature():
+       # Test code that requires litellm
+       pass
+   ```
+
+3. **Clean up after tests** to avoid affecting other tests (fixtures handle this automatically for database sessions)
 
 ### Test Coverage
 
