@@ -149,6 +149,20 @@ aipartnerupflow daemon start
 
 ### Code Quality
 
+#### Pre-commit Hooks (Recommended)
+
+Set up pre-commit hooks to automatically run `ruff check --fix` before each commit:
+
+```bash
+# Install pre-commit (included in [dev] extra)
+pip install pre-commit
+
+# Install git hooks
+pre-commit install
+```
+
+After setup, `ruff check src/ tests/ --fix` will run automatically on every `git commit`.
+
 #### Format Code
 
 ```bash
