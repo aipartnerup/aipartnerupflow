@@ -687,7 +687,7 @@ def create_session(
                         await conn.run_sync(Base.metadata.create_all)
                 # Check if we're already in an event loop
                 try:
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop()
                     # If we're in an event loop, we can't use asyncio.run()
                     # In this case, we'll skip table creation here and let it happen later
                     # when the async session is actually used (e.g., in main.py)

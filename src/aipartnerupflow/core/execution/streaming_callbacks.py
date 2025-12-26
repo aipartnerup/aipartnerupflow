@@ -97,7 +97,7 @@ class StreamingCallbacks:
             
             # Check if we're already in an event loop
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 # We're in an event loop, create a task
                 asyncio.create_task(self._send_progress_update(progress_data))
             except RuntimeError:
@@ -117,7 +117,7 @@ class StreamingCallbacks:
             logger.info(f'📡 [StreamingCallbacks] Sending progress update: {progress_data}')
             
             # Use root task ID for stream manager if available
-            stream_task_id = self.root_task_id if self.root_task_id else progress_data.get("task_id")
+            self.root_task_id if self.root_task_id else progress_data.get("task_id")
             
             # If event_queue is set (via bridge or direct), use it
             if self.event_queue:

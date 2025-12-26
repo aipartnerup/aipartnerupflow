@@ -34,7 +34,7 @@ def run_async_safe(coro):
     """Safely run async coroutine"""
     import asyncio
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         import concurrent.futures
         
         def run_in_thread():
@@ -88,7 +88,7 @@ def task_tree(
     """
     try:
         # Import to register executor
-        from aipartnerupflow.extensions.generate import GenerateExecutor
+        from aipartnerupflow.extensions.generate import GenerateExecutor  # noqa: F401
         
         # Set LLM key from CLI params (if provided via environment or params)
         # Priority: params -> LLMKeyConfigManager -> env

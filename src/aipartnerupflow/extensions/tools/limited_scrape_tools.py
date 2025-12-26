@@ -87,7 +87,7 @@ class LimitedScrapeWebsiteTool(BaseTool):
             # Apply focus/exclude sections if provided
             if focus_sections or exclude_sections:
                 # Simple keyword-based filtering
-                text_lower = text_content.lower()
+                text_content.lower()
                 filtered_content = []
                 
                 for line in text_content.split('\n'):

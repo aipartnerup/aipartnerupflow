@@ -146,7 +146,7 @@ class TestBatchManagerExecution:
         
         # Mock CrewManager creation (it's imported inside execute_works method)
         # Need to patch where it's imported from, not where it's used
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager', side_effect=[mock_crew_manager1, mock_crew_manager2]) as mock_crew_class:
+        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager', side_effect=[mock_crew_manager1, mock_crew_manager2]):
             # Execute batch
             result = await batch_manager.execute()
             

@@ -81,8 +81,8 @@ class TestInitializeExtensions:
         assert command_exec is not None, "CommandExecutor should be registered"
         
         # Verify other extensions are NOT registered (selective initialization)
-        crewai = registry.get_by_id("crewai_executor")
-        rest = registry.get_by_id("rest_executor")
+        registry.get_by_id("crewai_executor")
+        registry.get_by_id("rest_executor")
         # These may be None if they weren't imported, which is expected for selective init
         # We just verify the function completed without error
     
@@ -162,7 +162,7 @@ class TestCreateAppByProtocol:
     async def test_create_app_by_protocol_skips_auto_initialization(self):
         """Test that create_app_by_protocol() can skip auto-initialization"""
         registry = get_registry()
-        initial_count = len(registry._by_id)
+        len(registry._by_id)
         
         try:
             # Manually initialize extensions first
@@ -202,9 +202,9 @@ class TestCustomA2AStarletteApplicationASGI:
     def setup_method(self):
         """Setup for each test"""
         try:
-            from aipartnerupflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
-            from a2a.server.apps.jsonrpc.starlette_app import AgentCard
-            from a2a.server.request_handlers import DefaultRequestHandler
+            from aipartnerupflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication  # noqa: F401
+            from a2a.server.apps.jsonrpc.starlette_app import AgentCard  # noqa: F401
+            from a2a.server.request_handlers import DefaultRequestHandler  # noqa: F401
         except ImportError:
             pytest.skip("a2a module not available")
     
@@ -451,7 +451,7 @@ class TestDynamicExtensionInitialization:
         
         # Only stdio and http should be registered (if available)
         # Other extensions should be skipped
-        stdio_registered = registry.is_registered("system_info_executor") or registry.is_registered("command_executor")
+        registry.is_registered("system_info_executor") or registry.is_registered("command_executor")
         # http may or may not be registered depending on httpx availability
         # But we verify the function completed without error
         assert True  # Function completed

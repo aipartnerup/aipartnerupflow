@@ -33,7 +33,7 @@ def run_async_safe(coro: Coroutine) -> Any:
     """
     try:
         # Check if event loop is already running
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         # Event loop is running, we need to run in a new thread or use nest_asyncio
         # For CLI commands, we'll use a workaround: create a new event loop in a thread
         import concurrent.futures
@@ -274,7 +274,7 @@ def flow(
                             results.append(result)
                         return results
                     
-                    all_results = run_async_safe(run_all_groups())
+                    run_async_safe(run_all_groups())
                 except Exception as e:
                     logger.error(f"Background task execution failed: {str(e)}", exc_info=True)
             

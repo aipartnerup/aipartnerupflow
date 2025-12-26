@@ -180,7 +180,6 @@ class TaskManager:
             cancel_result = None
             token_usage = None
             result_data = None
-            executor_cancelled = False  # Track if executor.cancel() was actually called
             
             if task.status == "in_progress":
                 executor = self._executor_instances.get(task_id)
@@ -188,7 +187,6 @@ class TaskManager:
                     try:
                         logger.info(f"Calling executor.cancel() for task {task_id}")
                         cancel_result = await executor.cancel()
-                        executor_cancelled = True
                         logger.info(f"Executor {executor.__class__.__name__} cancel() returned: {cancel_result}")
                         
                         if cancel_result and cancel_result.get("status") == "cancelled":
@@ -1208,7 +1206,7 @@ class TaskManager:
         
         if extension is None or extension.category != ExtensionCategory.EXECUTOR:
             # Task type not registered
-            registered_extensions = registry.list_by_category(ExtensionCategory.EXECUTOR)
+            registry.list_by_category(ExtensionCategory.EXECUTOR)
             error_msg = (
                 f"Task executor not found. "
                 f"type='{task_type}', method='{task_method}'. "

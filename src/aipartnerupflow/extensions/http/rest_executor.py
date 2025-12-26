@@ -5,6 +5,7 @@ This executor allows tasks to make HTTP requests to external APIs,
 webhooks, and HTTP-based services.
 """
 
+import json
 import httpx
 from typing import Dict, Any, Optional
 from aipartnerupflow.core.base import BaseTask

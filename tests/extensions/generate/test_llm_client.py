@@ -23,7 +23,7 @@ class TestLLMClient:
                 # Actually we need to patch it differently - let's just test the error case
                 # or skip if openai is not installed
                 try:
-                    import openai
+                    import openai  # noqa: F401
                     with patch('openai.AsyncOpenAI') as mock_openai_class:
                         mock_client = Mock(api_key="test-key")
                         mock_openai_class.return_value = mock_client
@@ -36,7 +36,7 @@ class TestLLMClient:
         """Test creating Anthropic client"""
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
             try:
-                import anthropic
+                import anthropic  # noqa: F401
                 with patch('anthropic.AsyncAnthropic') as mock_anthropic_class:
                     mock_client = Mock(api_key="test-key")
                     mock_anthropic_class.return_value = mock_client
@@ -54,7 +54,7 @@ class TestLLMClient:
     async def test_openai_client_generate(self):
         """Test OpenAI client generation"""
         try:
-            import openai
+            import openai  # noqa: F401
         except ImportError:
             pytest.skip("OpenAI package not installed")
         
@@ -74,7 +74,7 @@ class TestLLMClient:
     async def test_anthropic_client_generate(self):
         """Test Anthropic client generation"""
         try:
-            import anthropic
+            import anthropic  # noqa: F401
         except ImportError:
             pytest.skip("Anthropic package not installed")
         

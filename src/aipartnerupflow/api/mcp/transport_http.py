@@ -133,7 +133,7 @@ class HttpTransport:
         """
         request_id = request.get("id")
         method = request.get("method")
-        params = request.get("params", {})
+        request.get("params", {})
         
         # Handle initialize
         if method == "initialize":

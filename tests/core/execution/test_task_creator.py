@@ -1150,7 +1150,7 @@ class TestTaskCreatorCopy:
             parent_id=root_task.id,
             dependencies=[{"id": task_a.id, "required": True}]
         )
-        task_c = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-c-1", "Task C",
             parent_id=root_task.id,
@@ -1192,7 +1192,7 @@ class TestTaskCreatorCopy:
             "child-task-3", "Child Task",
             parent_id=parent_task.id
         )
-        dependent_task = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "dependent-task-1", "Dependent Task",
             parent_id=root_task.id,
@@ -1228,12 +1228,12 @@ class TestTaskCreatorCopy:
             "child-1-1", "Child 1",
             parent_id=root_task.id
         )
-        child2 = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-2-1", "Child 2",
             parent_id=root_task.id
         )
-        grandchild1 = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "grandchild-1-1", "Grandchild 1",
             parent_id=child1.id
@@ -1293,7 +1293,7 @@ class TestTaskCreatorCopy:
         )
         
         # Create task copy
-        new_tree = await creator.create_task_copy(root_task)
+        await creator.create_task_copy(root_task)
         
         # Refresh all original tasks
         sync_db_session.refresh(root_task)
@@ -1364,7 +1364,7 @@ class TestTaskCreatorCopy:
             "original-task-6", "Original Task",
             parent_id=root_task.id
         )
-        child_task = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-task-6", "Child Task",
             parent_id=original_task.id
@@ -1383,7 +1383,7 @@ class TestTaskCreatorCopy:
             "another-branch-6", "Another Branch",
             parent_id=root_task.id
         )
-        another_child = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "another-child-6", "Another Child",
             parent_id=another_branch.id
@@ -1441,7 +1441,7 @@ class TestTaskCreatorCopy:
             "original-task-5", "Original Task",
             parent_id=root_task.id
         )
-        child_task = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-task-5", "Child Task",
             parent_id=original_task.id
@@ -1456,7 +1456,7 @@ class TestTaskCreatorCopy:
         )
         
         # Transitive dependent (depends on direct_dependent)
-        transitive_dependent = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "transitive-dependent-5", "Transitive Dependent",
             parent_id=root_task.id,
@@ -1532,7 +1532,7 @@ class TestTaskCreatorCopy:
             "branch-2-1", "Branch 2",
             parent_id=root_task.id
         )
-        task_b = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-b-3", "Task B",
             parent_id=branch2.id,
@@ -1543,7 +1543,7 @@ class TestTaskCreatorCopy:
             "branch-3-1", "Branch 3",
             parent_id=root_task.id
         )
-        task_c = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-c-2", "Task C",
             parent_id=branch3.id
@@ -1723,7 +1723,7 @@ class TestTaskCreatorCopy:
             "child-1-children", "Child 1",
             parent_id=root_task.id
         )
-        grandchild1 = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "grandchild-1-children", "Grandchild 1",
             parent_id=child1.id
@@ -1733,12 +1733,12 @@ class TestTaskCreatorCopy:
             "child-2-children", "Child 2",
             parent_id=root_task.id
         )
-        grandchild2 = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "grandchild-2-children", "Grandchild 2",
             parent_id=child2.id
         )
-        task_depends_on_both = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-depends-both", "Task Depends on Both",
             parent_id=root_task.id,  # Same root tree
@@ -1799,19 +1799,19 @@ class TestTaskCreatorCopy:
             "child-2-dedup", "Child 2",
             parent_id=root_task.id
         )
-        task_x = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-x-dedup", "Task X",
             parent_id=root_task.id,  # Same root tree
             dependencies=[{"id": child1.id, "required": True}]
         )
-        task_y = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-y-dedup", "Task Y",
             parent_id=root_task.id,  # Same root tree
             dependencies=[{"id": child2.id, "required": True}]
         )
-        task_z = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-z-dedup", "Task Z",
             parent_id=root_task.id,  # Same root tree
@@ -1897,7 +1897,7 @@ class TestTaskCreatorCopyWithSave:
             sync_db_session, task_repository,
             "root-save-test", "Root Task"
         )
-        child_task = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-save-test", "Child Task",
             parent_id=root_task.id
@@ -1935,7 +1935,7 @@ class TestTaskCreatorCopyWithSave:
             sync_db_session, task_repository,
             "root-save-true", "Root Task"
         )
-        child_task = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-save-true", "Child Task",
             parent_id=root_task.id
@@ -1977,7 +1977,7 @@ class TestTaskCreatorCopyWithSave:
             sync_db_session, task_repository,
             "root-array-test", "Root Task"
         )
-        child_task = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-array-test", "Child Task",
             parent_id=root_task.id,
@@ -1996,7 +1996,7 @@ class TestTaskCreatorCopyWithSave:
         
         # Verify all tasks have required fields (based on TaskModel)
         task_model_class = get_task_model_class()
-        task_columns = set(task_model_class.__table__.columns.keys())
+        set(task_model_class.__table__.columns.keys())
         
         for task_dict in task_array:
             # Should have name (required for tasks.create)
@@ -2043,12 +2043,12 @@ class TestTaskCreatorCopyWithSave:
             sync_db_session, task_repository,
             "root-dup-1", "Duplicate Name"
         )
-        child1 = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-dup-1", "Duplicate Name",  # Same name
             parent_id=root_task.id
         )
-        child2 = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-dup-2", "Duplicate Name",  # Same name again
             parent_id=root_task.id
@@ -2086,7 +2086,7 @@ class TestTaskCreatorCopyWithSave:
             "child-parent-ref", "Child Task",
             parent_id=root_task.id
         )
-        grandchild_task = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "grandchild-parent-ref", "Grandchild Task",
             parent_id=child_task.id
@@ -2133,7 +2133,7 @@ class TestTaskCreatorCopyWithSave:
             "task-a-dep", "Task A",
             parent_id=root_task.id
         )
-        task_b = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-b-dep", "Task B",
             parent_id=root_task.id,
@@ -2173,7 +2173,7 @@ class TestTaskCreatorCopyWithSave:
             sync_db_session, task_repository,
             "root-compat", "Root Task"
         )
-        child_task = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-compat", "Child Task",
             parent_id=root_task.id,
@@ -2234,7 +2234,7 @@ class TestTaskCreatorCopyWithSave:
             parent_id=root_task.id,
             dependencies=[{"id": task_a.id, "required": True}]
         )
-        task_c = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-c-custom", "Task C",
             parent_id=root_task.id
@@ -2277,7 +2277,7 @@ class TestTaskCreatorCopyWithSave:
             "task-a-full", "Task A",
             parent_id=root_task.id
         )
-        task_b = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "task-b-full", "Task B",
             parent_id=root_task.id
@@ -2387,7 +2387,7 @@ class TestTaskCreatorCopyWithSave:
             "task-a-include", "Task A",
             parent_id=root_task.id
         )
-        child_a = await self.create_task(
+        await self.create_task(
             sync_db_session, task_repository,
             "child-a-include", "Child A",
             parent_id=task_a.id

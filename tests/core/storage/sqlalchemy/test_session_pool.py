@@ -118,7 +118,7 @@ class TestSessionPoolManager:
         manager.initialize(path=str(db_path))
         
         # Create a session
-        session = manager.create_session()
+        manager.create_session()
         assert manager.get_active_session_count() == 1
         
         # Wait for timeout
@@ -223,7 +223,7 @@ class TestTaskTreeSession:
             
             # Try to create second session - should raise SessionLimitExceeded
             with pytest.raises(SessionLimitExceeded):
-                async with create_task_tree_session(connection_string=connection_string) as session2:
+                async with create_task_tree_session(connection_string=connection_string):
                     pass
     
     @pytest.mark.asyncio
@@ -397,7 +397,7 @@ class TestSessionPoolWithTaskExecutor:
         # Create two tasks in different sessions
         async with create_task_tree_session(connection_string=connection_string) as session1:
             repo1 = TaskRepository(session1, task_model_class=TaskModel)
-            task1 = await repo1.create_task(
+            await repo1.create_task(
                 id=task1_id,
                 name="Task 1",
                 user_id="user-1"
@@ -406,7 +406,7 @@ class TestSessionPoolWithTaskExecutor:
         
         async with create_task_tree_session(connection_string=connection_string) as session2:
             repo2 = TaskRepository(session2, task_model_class=TaskModel)
-            task2 = await repo2.create_task(
+            await repo2.create_task(
                 id=task2_id,
                 name="Task 2",
                 user_id="user-2"

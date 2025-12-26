@@ -920,7 +920,6 @@ class TaskExecutor:
             
             if not is_required and not is_ancestor:
                 # Check if any descendant is required
-                has_required_descendant = False
                 def check_descendants(n: TaskTreeNode) -> bool:
                     if n.task.id in required_ids or n.task.id in ancestor_ids:
                         return True

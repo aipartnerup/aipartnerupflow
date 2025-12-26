@@ -16,8 +16,8 @@ logger = get_logger(__name__)
 
 try:
     import grpc
-    from google.protobuf import json_format
-    from google.protobuf.message import Message
+    from google.protobuf import json_format  # noqa: F401
+    from google.protobuf.message import Message  # noqa: F401
     GRPC_AVAILABLE = True
 except ImportError:
     GRPC_AVAILABLE = False
@@ -108,7 +108,7 @@ class GrpcExecutor(BaseTask):
             raise ValidationError(f"[{self.id}] method is required in inputs")
         
         request_data = inputs.get("request", {})
-        timeout = inputs.get("timeout", 30.0)
+        inputs.get("timeout", 30.0)
         metadata_dict = inputs.get("metadata", {})
         
         logger.info(f"Calling gRPC {service}.{method} on {server}")

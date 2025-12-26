@@ -48,7 +48,7 @@ async def sample_task(use_test_db_session):
     task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
 
     task_id = f"test-task-{uuid.uuid4().hex[:8]}"
-    task = await task_repository.create_task(
+    await task_repository.create_task(
         id=task_id,
         name="Test Task",
         user_id="test_user",
@@ -1082,7 +1082,7 @@ class TestHandleTaskGenerate:
                     "aipartnerupflow.core.execution.task_executor.TaskExecutor",
                     return_value=mock_executor,
                 ):
-                    result = await task_routes.handle_task_generate(
+                    await task_routes.handle_task_generate(
                         params, mock_request, request_id
                     )
 

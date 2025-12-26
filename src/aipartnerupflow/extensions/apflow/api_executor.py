@@ -133,7 +133,7 @@ class ApFlowApiExecutor(BaseTask):
         
         params = inputs.get("params", {})
         auth_token = inputs.get("auth_token")
-        use_streaming = inputs.get("use_streaming", False)
+        inputs.get("use_streaming", False)
         wait_for_completion = inputs.get("wait_for_completion", False)
         poll_interval = inputs.get("poll_interval", 1.0)
         timeout = inputs.get("timeout", 300.0)

@@ -104,12 +104,12 @@ class TestWithDbSessionContext:
     @pytest.mark.asyncio
     async def test_with_db_session_context_auto_commit(self, tmp_path, use_test_db_session):
         """Test with_db_session_context with auto_commit=True commits on success"""
-        default_session = get_default_session()
+        get_default_session()
         
         async with with_db_session_context(use_pool=False, auto_commit=True) as session:
             # Create a task to test commit
             repo = TaskRepository(session)
-            task = await repo.create_task(
+            await repo.create_task(
                 id="test-task-1",
                 name="Test Task",
                 status="pending",

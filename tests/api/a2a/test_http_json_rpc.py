@@ -2180,7 +2180,7 @@ def test_a2a_execute_task_tree_vs_tasks_execute(json_rpc_client):
     if "result" in a2a_result:
         assert isinstance(a2a_result["result"], (dict, list))
     elif "error" in a2a_result:
-        error = a2a_result["error"]
+        a2a_result["error"]
         # Other errors are acceptable for comparison test
         pass
     

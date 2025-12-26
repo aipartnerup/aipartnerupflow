@@ -1647,7 +1647,7 @@ class TaskCreator:
         result_value = getattr(original_task, 'result', None)
         
         # Get current time for new task timestamps
-        current_time = datetime.now(timezone.utc)
+        datetime.now(timezone.utc)
         
         # Get TaskModel class
         task_model_class = get_task_model_class()

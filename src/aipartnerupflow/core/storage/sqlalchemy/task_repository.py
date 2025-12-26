@@ -382,7 +382,6 @@ class TaskRepository:
                 logger.debug(f"Base.metadata is polluted but using custom TaskModel {self.task_model_class.__name__}, not reloading")
             
             # Use clean TaskModel if Base.metadata is polluted
-            task_model_to_use = clean_task_model if use_clean_task_model else self.task_model_class
             
             # Update self.task_model_class if we're using clean TaskModel
             if use_clean_task_model:

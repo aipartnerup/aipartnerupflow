@@ -52,9 +52,7 @@ from aipartnerupflow.core.decorators import (
     get_use_task_creator,
     set_require_existing_tasks,
     get_require_existing_tasks,
-    executor_register,
-    storage_register,
-    hook_register,
+    # executor_register, storage_register, hook_register already imported from extensions
 )
 from aipartnerupflow.core.config import (
     get_pre_hooks,

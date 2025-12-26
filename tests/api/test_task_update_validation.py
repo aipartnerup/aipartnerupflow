@@ -42,7 +42,7 @@ async def pending_task(use_test_db_session):
     task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
     
     task_id = f"pending-task-{uuid.uuid4().hex[:8]}"
-    task = await task_repository.create_task(
+    await task_repository.create_task(
         id=task_id,
         name="Pending Task",
         user_id="test_user",
@@ -63,7 +63,7 @@ async def completed_task(use_test_db_session):
     task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
     
     task_id = f"completed-task-{uuid.uuid4().hex[:8]}"
-    task = await task_repository.create_task(
+    await task_repository.create_task(
         id=task_id,
         name="Completed Task",
         user_id="test_user",
@@ -89,7 +89,7 @@ async def in_progress_task(use_test_db_session):
     task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
     
     task_id = f"inprogress-task-{uuid.uuid4().hex[:8]}"
-    task = await task_repository.create_task(
+    await task_repository.create_task(
         id=task_id,
         name="In Progress Task",
         user_id="test_user",
@@ -116,7 +116,7 @@ async def task_tree_with_dependencies(use_test_db_session):
     
     # Create root task
     root_id = f"root-{uuid.uuid4().hex[:8]}"
-    root_task = await task_repository.create_task(
+    await task_repository.create_task(
         id=root_id,
         name="Root Task",
         user_id="test_user",
@@ -130,7 +130,7 @@ async def task_tree_with_dependencies(use_test_db_session):
     
     # Create child task 1
     child1_id = f"child1-{uuid.uuid4().hex[:8]}"
-    child1_task = await task_repository.create_task(
+    await task_repository.create_task(
         id=child1_id,
         name="Child Task 1",
         user_id="test_user",
@@ -145,7 +145,7 @@ async def task_tree_with_dependencies(use_test_db_session):
     
     # Create child task 2
     child2_id = f"child2-{uuid.uuid4().hex[:8]}"
-    child2_task = await task_repository.create_task(
+    await task_repository.create_task(
         id=child2_id,
         name="Child Task 2",
         user_id="test_user",
@@ -207,7 +207,7 @@ class TestCriticalFieldValidation:
         
         # Create root task
         root_id = f"root-{uuid.uuid4().hex[:8]}"
-        root_task = await task_repository.create_task(
+        await task_repository.create_task(
             id=root_id,
             name="Root Task",
             user_id="test_user",
@@ -221,7 +221,7 @@ class TestCriticalFieldValidation:
         
         # Create completed task in same tree
         completed_id = f"completed-{uuid.uuid4().hex[:8]}"
-        completed_task = await task_repository.create_task(
+        await task_repository.create_task(
             id=completed_id,
             name="Completed Task",
             user_id="test_user",
@@ -262,7 +262,7 @@ class TestCriticalFieldValidation:
         
         # Create root task
         root_id = f"root-{uuid.uuid4().hex[:8]}"
-        root_task = await task_repository.create_task(
+        await task_repository.create_task(
             id=root_id,
             name="Root Task",
             user_id="test_user",
@@ -276,7 +276,7 @@ class TestCriticalFieldValidation:
         
         # Create in_progress task in same tree
         in_progress_id = f"inprogress-{uuid.uuid4().hex[:8]}"
-        in_progress_task = await task_repository.create_task(
+        await task_repository.create_task(
             id=in_progress_id,
             name="In Progress Task",
             user_id="test_user",

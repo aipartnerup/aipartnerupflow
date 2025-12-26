@@ -131,7 +131,7 @@ def validate_input_schema(input_schema: Type[BaseModel] | Dict[str, Any], parame
             return validate_json_schema(input_schema, parameters)
         else:
             # Use Pydantic's built-in validation with field validators
-            validated_data = input_schema(**parameters)
+            input_schema(**parameters)
             return True
     except Exception as e:
         # Log validation error for debugging

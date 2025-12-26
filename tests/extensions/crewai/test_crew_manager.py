@@ -189,7 +189,7 @@ class TestCrewManager:
                 mock_crew_class.return_value = mock_crew
                 
                 # Create CrewManager with string LLM in works format
-                crew_manager = CrewManager(
+                CrewManager(
                     name="Test Crew",
                     works={
                         "agents": {
@@ -290,7 +290,7 @@ class TestCrewManager:
                 mock_crew_class.return_value = mock_crew
                 
                 # Create CrewManager with string tool names in works format
-                crew_manager = CrewManager(
+                CrewManager(
                     name="Test Crew",
                     works={
                         "agents": {
@@ -354,7 +354,7 @@ class TestCrewManager:
                 mock_crew_class.return_value = mock_crew
 
                 # Create CrewManager with both string LLM and tools in works format
-                crew_manager = CrewManager(
+                CrewManager(
                     name="Test Crew",
                     works={
                         "agents": {
@@ -478,7 +478,7 @@ class TestCrewManager:
             pytest.skip("OPENAI_API_KEY is not set")
         
         try:
-            import crewai_tools
+            import crewai_tools  # noqa: F401
             from aipartnerupflow.core.tools import resolve_tool, get_tool_registry
         except ImportError:
             pytest.skip("crewai_tools or CrewAI module not available")

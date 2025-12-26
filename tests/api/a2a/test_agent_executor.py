@@ -411,7 +411,7 @@ class TestAgentExecutor:
             }
             mock_execute_tasks.return_value = mock_execution_result
             
-            result = await executor._execute_simple_mode(context, mock_event_queue)
+            await executor._execute_simple_mode(context, mock_event_queue)
             
             # Verify TaskCreator.create_task_copy was called with children=True
             mock_creator.create_task_copy.assert_called_once()
@@ -1012,7 +1012,7 @@ class TestAgentExecutor:
             assert "disk-info" in task_ids_called
             
             # Verify pre-hook modified inputs (check in database)
-            cpu_task_after = await repo.get_task_by_id("cpu-info")
+            await repo.get_task_by_id("cpu-info")
             # Note: inputs modification happens in memory, but we can verify
             # the hook was called and had access to the task
             

@@ -94,7 +94,7 @@ class TestCrewToolDecorator:
             
             # Override with same name
             @crew_tool(override=True)
-            class FirstTool(BaseTool):  # Same name, different class
+            class FirstTool(BaseTool):  # noqa: F811 - intentional redefinition to test override
                 name: str = "First Tool Overridden"
                 description: str = "Overridden tool"
                 

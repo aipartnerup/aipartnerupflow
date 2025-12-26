@@ -54,11 +54,11 @@ try:
 except ImportError:
     pass  # Extension not available, tests will handle this
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from aipartnerupflow.core.storage.sqlalchemy.models import Base, TASK_TABLE_NAME
-from aipartnerupflow.core.storage.factory import (
+from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker  # noqa: E402
+from aipartnerupflow.core.storage.sqlalchemy.models import Base, TASK_TABLE_NAME  # noqa: E402
+from aipartnerupflow.core.storage.factory import (  # noqa: E402
     create_session,
     get_default_session,
     reset_default_session,
@@ -66,7 +66,7 @@ from aipartnerupflow.core.storage.factory import (
     is_postgresql_url,
     normalize_postgresql_url,
 )
-from aipartnerupflow.core.utils.logger import get_logger
+from aipartnerupflow.core.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 

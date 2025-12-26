@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 try:
     import websockets
-    from websockets.client import WebSocketClientProtocol
+    from websockets.client import WebSocketClientProtocol  # noqa: F401
     WEBSOCKETS_AVAILABLE = True
 except ImportError:
     WEBSOCKETS_AVAILABLE = False

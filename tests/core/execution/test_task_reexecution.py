@@ -30,7 +30,7 @@ class TestTaskReexecution:
         )
         
         # Execute the task first time - should succeed
-        result1 = await task_executor.execute_task_by_id(
+        await task_executor.execute_task_by_id(
             task_id=task.id,
             use_streaming=False,
             db_session=use_test_db_session
@@ -51,7 +51,7 @@ class TestTaskReexecution:
             use_test_db_session.refresh(task_after_first)
         
         # Re-execute the failed task
-        result2 = await task_executor.execute_task_by_id(
+        await task_executor.execute_task_by_id(
             task_id=task.id,
             use_streaming=False,
             db_session=use_test_db_session
@@ -100,7 +100,7 @@ class TestTaskReexecution:
             use_test_db_session.refresh(child_task)
         
         # Execute the task tree first time - should succeed
-        result1 = await task_executor.execute_task_by_id(
+        await task_executor.execute_task_by_id(
             task_id=parent_task.id,
             use_streaming=False,
             db_session=use_test_db_session
@@ -123,7 +123,7 @@ class TestTaskReexecution:
             use_test_db_session.refresh(parent_after_first)
         
         # Re-execute the failed parent task
-        result2 = await task_executor.execute_task_by_id(
+        await task_executor.execute_task_by_id(
             task_id=parent_task.id,
             use_streaming=False,
             db_session=use_test_db_session
@@ -168,7 +168,7 @@ class TestTaskReexecution:
         )
         
         # Execute the task - should execute normally (not as re-execution)
-        result = await task_executor.execute_task_by_id(
+        await task_executor.execute_task_by_id(
             task_id=task.id,
             use_streaming=False,
             db_session=use_test_db_session
@@ -205,10 +205,9 @@ class TestTaskReexecution:
         # Verify task completed
         task_after_first = await task_repository.get_task_by_id(task.id)
         assert task_after_first.status == "completed"
-        first_result = task_after_first.result
         
         # Try to execute again - should be skipped (task already completed)
-        result = await task_executor.execute_task_by_id(
+        await task_executor.execute_task_by_id(
             task_id=task.id,
             use_streaming=False,
             db_session=use_test_db_session

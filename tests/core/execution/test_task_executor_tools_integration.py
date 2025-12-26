@@ -17,8 +17,8 @@ import os
 try:
     from aipartnerupflow.core.execution.task_executor import TaskExecutor
     from aipartnerupflow.core.tools import get_tool_registry, tool_register, BaseTool
-    from pydantic import BaseModel, Field
-    from typing import Type
+    from pydantic import BaseModel, Field  # noqa: F401
+    from typing import Type  # noqa: F401
 except ImportError:
     TaskExecutor = None
     get_tool_registry = None
